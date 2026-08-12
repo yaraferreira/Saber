@@ -501,8 +501,8 @@
         if(error){
           showAuthMessage(error.message, 'err');
         } else if(!data.session){
-          showAuthMessage('Conta criada! Verifique seu e-mail para confirmar antes de entrar.', 'ok');
           setAuthMode('login');
+          showAuthMessage('Conta criada! Verifique seu e-mail para confirmar antes de entrar.', 'ok');
         }
       }
     }catch(err){
