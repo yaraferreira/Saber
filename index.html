@@ -262,6 +262,21 @@
   .fr-log-preview .v{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px; display:block; }
   .fr-log-preview .l{ font-size:9px; text-transform:uppercase; color:var(--ink-soft); }
 
+  .fr-food-results{ margin-top:-8px; margin-bottom:10px; }
+  .fr-food-result-item{
+    display:block; width:100%; text-align:left; background:#FFFEFA; border:1px solid var(--border);
+    border-top:none; padding:8px 12px; font-size:13px; cursor:pointer; font-family:'Inter',sans-serif; color:var(--ink);
+  }
+  .fr-food-result-item:first-child{ border-top:1px solid var(--border); border-radius:7px 7px 0 0; }
+  .fr-food-result-item:last-child{ border-radius:0 0 7px 7px; }
+  .fr-food-result-item:hover{ background:var(--paper-deep); }
+  .fr-food-result-item small{ display:block; color:var(--ink-soft); font-size:10.5px; font-family:'IBM Plex Mono',monospace; margin-top:1px; }
+  .fr-food-picked{
+    background:#FFFEFA; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:10px;
+  }
+  .fr-food-picked b{ display:block; margin-bottom:3px; font-family:'Inter',sans-serif; }
+  .fr-food-picked span{ color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:11px; }
+
   .fr-toast{ position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 2000; font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; color:#fff; padding: 11px 18px; border-radius: 8px; box-shadow: 0 8px 22px rgba(0,0,0,0.22); max-width: 90vw; }
   .fr-toast.fr-toast-ok{ background: var(--green-deep); }
   .fr-toast.fr-toast-err{ background: var(--rust); }
@@ -363,6 +378,8 @@
   let currentDayLogs = [];
   let targets = {};
   let targetsLoaded = false;
+  let foods = [];
+  let foodsLoaded = false;
 
   let activeCat = 'todas';
   let searchTerm = '';
@@ -417,6 +434,40 @@
     if(h<15) return 'almoco';
     if(h<18) return 'lanche';
     return 'jantar';
+  }
+
+  const ACTIVITY_FACTORS = {
+    sedentario: 1.2,
+    leve: 1.375,
+    moderado: 1.55,
+    ativo: 1.725,
+    muito_ativo: 1.9
+  };
+  const GOAL_RULES = {
+    emagrecer:     { adjust: -500, proteinPerKg: 2.0, fatPercent: 0.25 },
+    manter:        { adjust: 0,    proteinPerKg: 1.6, fatPercent: 0.28 },
+    ganhar_massa:  { adjust: 400,  proteinPerKg: 1.8, fatPercent: 0.25 },
+    definir:       { adjust: -300, proteinPerKg: 2.2, fatPercent: 0.22 }
+  };
+  function calcMetabolicTargets({sex, age, height, weight, activity, goal}){
+    let bmr = sex === 'masculino'
+      ? (10*weight + 6.25*height - 5*age + 5)
+      : (10*weight + 6.25*height - 5*age - 161);
+    const tdee = bmr * (ACTIVITY_FACTORS[activity] || 1.2);
+    const rule = GOAL_RULES[goal] || GOAL_RULES.manter;
+    let calories = Math.max(tdee + rule.adjust, 1200); // piso de segurança
+    const proteinG = rule.proteinPerKg * weight;
+    const proteinKcal = proteinG * 4;
+    const fatKcal = calories * rule.fatPercent;
+    const fatG = fatKcal / 9;
+    const carbKcal = Math.max(calories - proteinKcal - fatKcal, 0);
+    const carbG = carbKcal / 4;
+    return {
+      calories: Math.round(calories),
+      protein: Math.round(proteinG),
+      carbs: Math.round(carbG),
+      fat: Math.round(fatG)
+    };
   }
 
   /* ---------- Auth ---------- */
@@ -476,11 +527,16 @@
     await sb.auth.signOut();
   });
 
+  let hasBooted = false;
   sb.auth.onAuthStateChange((event, session)=>{
     if(session && session.user){
       currentUser = session.user;
-      boot();
+      if(!hasBooted){
+        hasBooted = true;
+        boot();
+      }
     } else {
+      hasBooted = false;
       currentUser = null;
       currentProfile = null;
       isAdmin = false;
@@ -513,7 +569,15 @@
     renderPrimaryAction();
     renderTabs();
     loadRecipes();
+    loadFoods();
     if(currentView==='diary') renderDiary();
+    if(!currentProfile.onboarding_done){
+      try{
+        openOnboardingModal();
+      }catch(err){
+        console.error('Erro ao abrir a calculadora de metas', err);
+      }
+    }
   }
 
   /* ---------- View switching ---------- */
@@ -754,6 +818,97 @@
     setTimeout(()=> document.getElementById('fr-f-name').focus(), 30);
   }
 
+  function openOnboardingModal(){
+    const p = currentProfile || {};
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Calcular minhas metas</h3>
+      <p class="fr-hint" style="margin:-10px 0 16px;">
+        Isso calcula uma estimativa de kcal e macros por dia com base nos seus dados.
+        É um ponto de partida geral, não uma prescrição — se você tem uma condição de
+        saúde específica, vale confirmar com um nutricionista ou médico.
+      </p>
+      <form id="fr-onboard-form">
+        <div class="fr-row">
+          <div class="fr-field"><label for="fr-ob-sex">Sexo biológico</label>
+            <select id="fr-ob-sex">
+              <option value="feminino" ${p.sex==='feminino'?'selected':''}>Feminino</option>
+              <option value="masculino" ${p.sex==='masculino'?'selected':''}>Masculino</option>
+            </select>
+            <div class="fr-hint">Usado só no cálculo metabólico</div>
+          </div>
+          <div class="fr-field"><label for="fr-ob-age">Idade</label><input type="number" min="14" max="100" id="fr-ob-age" value="${esc(p.age||'')}" required></div>
+        </div>
+        <div class="fr-row">
+          <div class="fr-field"><label for="fr-ob-height">Altura (cm)</label><input type="number" min="120" max="230" id="fr-ob-height" value="${esc(p.height_cm||'')}" required></div>
+          <div class="fr-field"><label for="fr-ob-weight">Peso atual (kg)</label><input type="number" min="30" max="300" step="0.1" id="fr-ob-weight" value="${esc(p.weight_kg||'')}" required></div>
+        </div>
+        <div class="fr-field"><label for="fr-ob-activity">Nível de atividade</label>
+          <select id="fr-ob-activity">
+            <option value="sedentario" ${p.activity_level==='sedentario'?'selected':''}>Sedentário (pouco ou nenhum exercício)</option>
+            <option value="leve" ${p.activity_level==='leve'?'selected':''}>Leve (exercício leve, 1–3x/semana)</option>
+            <option value="moderado" ${(!p.activity_level || p.activity_level==='moderado')?'selected':''}>Moderado (exercício moderado, 3–5x/semana)</option>
+            <option value="ativo" ${p.activity_level==='ativo'?'selected':''}>Ativo (exercício intenso, 6–7x/semana)</option>
+            <option value="muito_ativo" ${p.activity_level==='muito_ativo'?'selected':''}>Muito ativo (treino intenso + trabalho físico)</option>
+          </select>
+        </div>
+        <div class="fr-field"><label for="fr-ob-goal">Objetivo</label>
+          <select id="fr-ob-goal">
+            <option value="emagrecer" ${(!p.goal || p.goal==='emagrecer')?'selected':''}>Emagrecer</option>
+            <option value="manter" ${p.goal==='manter'?'selected':''}>Manter o peso</option>
+            <option value="ganhar_massa" ${p.goal==='ganhar_massa'?'selected':''}>Ganhar massa muscular</option>
+            <option value="definir" ${p.goal==='definir'?'selected':''}>Definir (perder gordura mantendo músculo)</option>
+          </select>
+        </div>
+        <div class="fr-form-actions">
+          <button type="button" class="fr-btn-ghost" id="fr-onboard-skip">Pular por agora</button>
+          <button type="submit" class="fr-btn-primary">Calcular minhas metas</button>
+        </div>
+      </form>
+    `);
+    overlay.querySelector('#fr-onboard-skip').addEventListener('click', closeOverlay);
+    overlay.querySelector('#fr-onboard-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const btn = overlay.querySelector('button[type="submit"]');
+      const input = {
+        sex: document.getElementById('fr-ob-sex').value,
+        age: parseFloat(document.getElementById('fr-ob-age').value),
+        height: parseFloat(document.getElementById('fr-ob-height').value),
+        weight: parseFloat(document.getElementById('fr-ob-weight').value),
+        activity: document.getElementById('fr-ob-activity').value,
+        goal: document.getElementById('fr-ob-goal').value
+      };
+      const result = calcMetabolicTargets(input);
+      btn.disabled = true; btn.textContent = 'Calculando...';
+      try{
+        const { error: profErr } = await sb.from('profiles').update({
+          sex: input.sex, age: input.age, height_cm: input.height, weight_kg: input.weight,
+          activity_level: input.activity, goal: input.goal, onboarding_done: true
+        }).eq('id', currentUser.id);
+        if(profErr) throw profErr;
+        const { error: targetErr } = await sb.from('daily_targets').upsert({
+          user_id: currentUser.id, calories: result.calories, protein: result.protein,
+          carbs: result.carbs, fat: result.fat
+        });
+        if(targetErr) throw targetErr;
+        currentProfile = { ...currentProfile, ...input, height_cm: input.height, weight_kg: input.weight, activity_level: input.activity, onboarding_done: true };
+        targets = result;
+        showToast(`Metas calculadas: ${result.calories} kcal por dia.`, 'ok');
+        closeOverlay();
+        if(currentView==='diary') renderDiary();
+      }catch(err){
+        console.error(err);
+        showToast('Não foi possível salvar agora. Tente novamente.', 'err');
+        btn.disabled = false; btn.textContent = 'Calcular minhas metas';
+      }
+    });
+  }
+
+  async function loadFoods(){
+    const { data, error } = await sb.from('foods').select('*').order('name');
+    foods = error ? [] : (data || []);
+    foodsLoaded = true;
+  }
+
   async function loadRecipes(){
     recipesLoaded = false;
     renderGrid();
@@ -839,7 +994,7 @@
   function logRowHtml(e){
     return `
       <div class="fr-log-row">
-        <div class="fr-log-name">${esc(e.name)}${e.source==='recipe' ? `<small>${esc(e.quantity)}× porção</small>` : ''}</div>
+        <div class="fr-log-name">${esc(e.name)}${e.source==='recipe' ? `<small>${esc(e.quantity)}× porção</small>` : (e.source==='food' ? `<small>${esc(e.quantity)}g</small>` : '')}</div>
         <div class="fr-log-macros"><b>${Math.round(n0(e.calories))}</b> kcal &nbsp;P:${Math.round(n0(e.protein))} C:${Math.round(n0(e.carbs))} G:${Math.round(n0(e.fat))}</div>
         <button class="fr-log-del" id="fr-log-del-${e.id}" aria-label="Remover ${esc(e.name)}">&times;</button>
       </div>`;
@@ -886,6 +1041,7 @@
   function openTargetsModal(){
     const overlay = buildOverlay(`
       <h3 class="fr-form-title">Metas diárias</h3>
+      <button type="button" class="fr-btn-ghost" id="fr-use-calculator" style="width:100%;margin-bottom:16px;">Calcular automaticamente a partir dos meus dados</button>
       <form id="fr-targets-form">
         <div class="fr-row4">
           <div class="fr-field"><label for="fr-t-cal">Kcal</label><input type="number" min="0" id="fr-t-cal" value="${esc(targets.calories ?? '')}"></div>
@@ -900,6 +1056,10 @@
       </form>
     `);
     overlay.querySelector('#fr-targets-cancel').addEventListener('click', closeOverlay);
+    overlay.querySelector('#fr-use-calculator').addEventListener('click', ()=>{
+      closeOverlay();
+      openOnboardingModal();
+    });
     overlay.querySelector('#fr-targets-form').addEventListener('submit', async function(e){
       e.preventDefault();
       const btn = overlay.querySelector('button[type="submit"]');
@@ -945,12 +1105,34 @@
           </div>` : `<p class="fr-hint">Ainda não há receitas cadastradas.</p>`}
         </div>
         <div class="fr-log-panel ${hasRecipes?'':'active'}" id="fr-log-panel-custom">
-          <div class="fr-field"><label for="fr-log-name">Nome do alimento</label><input type="text" id="fr-log-name" placeholder="ex.: Banana, iogurte, pão francês..."></div>
-          <div class="fr-row4">
-            <div class="fr-field"><label for="fr-log-cal">Kcal</label><input type="number" min="0" id="fr-log-cal" value=""></div>
-            <div class="fr-field"><label for="fr-log-prot">Proteína (g)</label><input type="number" min="0" id="fr-log-prot" value=""></div>
-            <div class="fr-field"><label for="fr-log-carb">Carbo (g)</label><input type="number" min="0" id="fr-log-carb" value=""></div>
-            <div class="fr-field"><label for="fr-log-fat">Gordura (g)</label><input type="number" min="0" id="fr-log-fat" value=""></div>
+          <div id="fr-food-search-wrap">
+            <div class="fr-field">
+              <label for="fr-food-search">Buscar alimento</label>
+              <input type="text" id="fr-food-search" placeholder="ex.: banana, arroz, frango grelhado..." autocomplete="off">
+            </div>
+            <div id="fr-food-results"></div>
+            <div id="fr-food-selected" style="display:none">
+              <div class="fr-food-picked" id="fr-food-picked-label"></div>
+              <div class="fr-field"><label for="fr-food-qty">Quantidade consumida (g)</label><input type="number" min="1" id="fr-food-qty" value="100"></div>
+              <div class="fr-log-preview">
+                <div><span class="v" id="fr-fp-cal">0</span><span class="l">kcal</span></div>
+                <div><span class="v" id="fr-fp-prot">0</span><span class="l">ptn</span></div>
+                <div><span class="v" id="fr-fp-carb">0</span><span class="l">carb</span></div>
+                <div><span class="v" id="fr-fp-fat">0</span><span class="l">gord</span></div>
+              </div>
+              <button type="button" class="fr-btn-ghost" id="fr-food-change" style="width:100%;margin-top:8px;">Trocar alimento</button>
+            </div>
+            <div class="fr-hint" style="margin:10px 0 4px;">Valores da tabela TACO (base oficial brasileira), por 100g.</div>
+          </div>
+          <button type="button" class="fr-btn-ghost" id="fr-food-manual-toggle" style="width:100%;margin-top:6px;">Não encontrei — informar valores manualmente</button>
+          <div id="fr-food-manual-wrap" style="display:none">
+            <div class="fr-field"><label for="fr-log-name">Nome do alimento</label><input type="text" id="fr-log-name" placeholder="ex.: Banana, iogurte, pão francês..."></div>
+            <div class="fr-row4">
+              <div class="fr-field"><label for="fr-log-cal">Kcal</label><input type="number" min="0" id="fr-log-cal" value=""></div>
+              <div class="fr-field"><label for="fr-log-prot">Proteína (g)</label><input type="number" min="0" id="fr-log-prot" value=""></div>
+              <div class="fr-field"><label for="fr-log-carb">Carbo (g)</label><input type="number" min="0" id="fr-log-carb" value=""></div>
+              <div class="fr-field"><label for="fr-log-fat">Gordura (g)</label><input type="number" min="0" id="fr-log-fat" value=""></div>
+            </div>
           </div>
         </div>
         <div class="fr-row">
@@ -981,6 +1163,70 @@
     }
     if(subtabRecipe) subtabRecipe.addEventListener('click', ()=> setSource('recipe'));
     subtabCustom.addEventListener('click', ()=> setSource('custom'));
+
+    let selectedFood = null;
+    let customMode = 'search';
+    const foodSearchWrap = overlay.querySelector('#fr-food-search-wrap');
+    const foodManualWrap = overlay.querySelector('#fr-food-manual-wrap');
+    const foodManualToggle = overlay.querySelector('#fr-food-manual-toggle');
+    const foodSearchInput = overlay.querySelector('#fr-food-search');
+    const foodResultsEl = overlay.querySelector('#fr-food-results');
+    const foodSelectedEl = overlay.querySelector('#fr-food-selected');
+    const foodPickedLabel = overlay.querySelector('#fr-food-picked-label');
+    const foodQtyInput = overlay.querySelector('#fr-food-qty');
+
+    foodManualToggle.addEventListener('click', ()=>{
+      customMode = customMode === 'search' ? 'manual' : 'search';
+      foodSearchWrap.style.display = customMode==='search' ? '' : 'none';
+      foodManualWrap.style.display = customMode==='manual' ? '' : 'none';
+      foodManualToggle.textContent = customMode==='search'
+        ? 'Não encontrei — informar valores manualmente'
+        : 'Voltar a buscar na base de alimentos';
+    });
+
+    function renderFoodResults(query){
+      const norm = normalize(query);
+      if(norm.length < 2){ foodResultsEl.innerHTML=''; return; }
+      if(!foodsLoaded){ foodResultsEl.innerHTML = `<div class="fr-hint">Carregando base de alimentos...</div>`; return; }
+      const matches = foods.filter(f=> normalize(f.name).includes(norm)).slice(0,8);
+      if(matches.length===0){
+        foodResultsEl.innerHTML = `<div class="fr-hint" style="padding:6px 2px;">Nenhum resultado. Tente outro termo ou informe manualmente.</div>`;
+        return;
+      }
+      foodResultsEl.innerHTML = matches.map(f=>
+        `<button type="button" class="fr-food-result-item" data-id="${f.id}">${esc(f.name)}<small>${Math.round(f.kcal)} kcal / 100g</small></button>`
+      ).join('');
+      foodResultsEl.querySelectorAll('.fr-food-result-item').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const food = foods.find(f=> String(f.id)===btn.getAttribute('data-id'));
+          pickFood(food);
+        });
+      });
+    }
+    foodSearchInput.addEventListener('input', ()=> renderFoodResults(foodSearchInput.value));
+
+    function pickFood(food){
+      selectedFood = food;
+      foodSearchInput.value = '';
+      foodResultsEl.innerHTML = '';
+      foodSelectedEl.style.display = '';
+      foodPickedLabel.innerHTML = `<b>${esc(food.name)}</b><span>100g = ${Math.round(food.kcal)} kcal · P:${food.protein}g C:${food.carbs}g G:${food.fat}g</span>`;
+      updateFoodPreview();
+    }
+    overlay.querySelector('#fr-food-change').addEventListener('click', ()=>{
+      selectedFood = null;
+      foodSelectedEl.style.display = 'none';
+    });
+    function updateFoodPreview(){
+      if(!selectedFood) return;
+      const qty = parseFloat(foodQtyInput.value) || 0;
+      const factor = qty/100;
+      overlay.querySelector('#fr-fp-cal').textContent = Math.round(selectedFood.kcal*factor);
+      overlay.querySelector('#fr-fp-prot').textContent = Math.round(selectedFood.protein*factor);
+      overlay.querySelector('#fr-fp-carb').textContent = Math.round(selectedFood.carbs*factor);
+      overlay.querySelector('#fr-fp-fat').textContent = Math.round(selectedFood.fat*factor);
+    }
+    foodQtyInput.addEventListener('input', updateFoodPreview);
 
     function updateRecipePreview(){
       if(!hasRecipes) return;
@@ -1018,15 +1264,30 @@
           calories:n0(recipe.calories)*qty, protein:n0(recipe.protein)*qty, carbs:n0(recipe.carbs)*qty, fat:n0(recipe.fat)*qty
         };
       } else {
-        const name = document.getElementById('fr-log-name').value.trim();
-        if(!name){ document.getElementById('fr-log-name').focus(); return; }
-        entry = {
-          user_id: currentUser.id, date, meal_type: mealType, source:'custom', name,
-          calories: numOrNull(document.getElementById('fr-log-cal').value) || 0,
-          protein: numOrNull(document.getElementById('fr-log-prot').value) || 0,
-          carbs: numOrNull(document.getElementById('fr-log-carb').value) || 0,
-          fat: numOrNull(document.getElementById('fr-log-fat').value) || 0
-        };
+        if(customMode === 'search'){
+          if(!selectedFood){
+            showToast('Selecione um alimento da lista, ou toque em "informar manualmente".', 'err');
+            return;
+          }
+          const qty = parseFloat(foodQtyInput.value) || 0;
+          if(qty<=0){ foodQtyInput.focus(); return; }
+          const factor = qty/100;
+          entry = {
+            user_id: currentUser.id, date, meal_type: mealType, source:'food', name: selectedFood.name, quantity: qty,
+            calories: selectedFood.kcal*factor, protein: selectedFood.protein*factor,
+            carbs: selectedFood.carbs*factor, fat: selectedFood.fat*factor
+          };
+        } else {
+          const name = document.getElementById('fr-log-name').value.trim();
+          if(!name){ document.getElementById('fr-log-name').focus(); return; }
+          entry = {
+            user_id: currentUser.id, date, meal_type: mealType, source:'custom', name,
+            calories: numOrNull(document.getElementById('fr-log-cal').value) || 0,
+            protein: numOrNull(document.getElementById('fr-log-prot').value) || 0,
+            carbs: numOrNull(document.getElementById('fr-log-carb').value) || 0,
+            fat: numOrNull(document.getElementById('fr-log-fat').value) || 0
+          };
+        }
       }
       btn.disabled = true; btn.textContent = 'Salvando...';
       const { data, error } = await sb.from('diary_logs').insert(entry).select().single();
@@ -1052,10 +1313,6 @@
   clearSearchBtn.addEventListener('click', ()=>{
     searchInput.value=''; searchTerm=''; clearSearchBtn.style.display='none';
     renderGrid(); searchInput.focus();
-  });
-
-  sb.auth.getSession().then(({data})=>{
-    if(data.session){ currentUser = data.session.user; boot(); }
   });
 
   if('serviceWorker' in navigator){
