@@ -281,24 +281,6 @@
 </head>
 <body>
 
-<div id="setup-screen" style="display:none">
-  <div class="auth-card" style="max-width:420px;">
-    <h1 class="auth-title">Configuração inicial</h1>
-    <p class="auth-sub">Só precisa fazer isso uma vez</p>
-    <p style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:0 0 16px;">
-      Cole aqui a URL e a chave "anon public" do seu projeto Supabase
-      (Project Settings &gt; API, no painel do Supabase). Fica salvo só
-      neste navegador/celular.
-    </p>
-    <div id="setup-message" class="auth-message" hidden></div>
-    <form id="setup-form">
-      <div class="fr-field"><label for="setup-url">Project URL</label><input type="text" id="setup-url" placeholder="https://xxxxx.supabase.co" required></div>
-      <div class="fr-field"><label for="setup-key">Chave anon public</label><input type="text" id="setup-key" placeholder="eyJhbGciOi..." required></div>
-      <button type="submit" class="fr-btn-primary" style="width:100%">Salvar e continuar</button>
-    </form>
-  </div>
-</div>
-
 <div id="auth-screen">
   <div class="auth-card">
     <h1 class="auth-title">Saber<span style="color:var(--mustard)">.</span></h1>
@@ -354,32 +336,10 @@
 <script>
 (function(){
   /* ============================================================
-     CONFIGURAÇÃO — lida da tela de "Configuração inicial" (localStorage),
-     nada de editar código aqui.
+     CONFIGURAÇÃO — já preenchida, ninguém mais precisa digitar nada.
      ============================================================ */
-  const SUPABASE_URL = localStorage.getItem('cozinha_sb_url');
-  const SUPABASE_ANON_KEY = localStorage.getItem('cozinha_sb_key');
-
-  if(!SUPABASE_URL || !SUPABASE_ANON_KEY){
-    document.getElementById('setup-screen').style.display = '';
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('setup-form').addEventListener('submit', function(e){
-      e.preventDefault();
-      const url = document.getElementById('setup-url').value.trim();
-      const key = document.getElementById('setup-key').value.trim();
-      const msg = document.getElementById('setup-message');
-      if(!url || !key){
-        msg.textContent = 'Preencha os dois campos.';
-        msg.className = 'auth-message err';
-        msg.hidden = false;
-        return;
-      }
-      localStorage.setItem('cozinha_sb_url', url);
-      localStorage.setItem('cozinha_sb_key', key);
-      location.reload();
-    });
-    return; // espera a configuração antes de iniciar o resto do app
-  }
+  const SUPABASE_URL = 'https://dzkugfwflxdhvktyqkwx.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_MkDlFWdXkUnkB-ds8OG8wA_9JMlqU8n';
 
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
