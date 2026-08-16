@@ -85,6 +85,36 @@
     background: var(--mustard); color:#fff; font-size:9.5px; padding:2px 7px; border-radius:999px;
     text-transform:uppercase; letter-spacing:.05em; font-weight:600;
   }
+  .fr-gear-btn{
+    width:26px; height:26px; border-radius:50%; border:1px solid var(--border); background:var(--paper-deep);
+    color:var(--ink); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;
+  }
+  .fr-gear-btn:hover{ background:var(--card); }
+  .fr-code-box{
+    background:var(--green-deep); border-radius:10px; padding:16px; text-align:center; margin-bottom:14px;
+  }
+  .fr-code-label{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:#C9D9CD; margin-bottom:6px; }
+  .fr-code-val{ font-family:'Fraunces',serif; font-weight:700; font-size:26px; letter-spacing:.1em; color:#F6F1DF; }
+  .fr-linked-card{
+    background:#FFFEFA; border:1px solid var(--border); border-radius:9px; padding:12px 14px;
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px;
+  }
+  .fr-linked-name{ font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; }
+  .fr-linked-role{ font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); }
+  .fr-client-row{
+    background:#FFFEFA; border:1px solid var(--border); border-radius:9px; padding:12px 14px; margin-bottom:8px;
+    display:flex; justify-content:space-between; align-items:center; cursor:pointer;
+  }
+  .fr-client-row:hover{ background:var(--paper-deep); }
+  .fr-client-name{ font-weight:600; font-size:13.5px; }
+  .fr-client-arrow{ color:var(--ink-soft); }
+  .fr-settings-section{ margin-bottom:22px; }
+  .fr-settings-section:last-child{ margin-bottom:0; }
+  .fr-settings-section h4{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--green-deep); margin:0 0 10px; border-top:1px solid var(--border); padding-top:16px;
+  }
+  .fr-settings-section:first-child h4{ border-top:none; padding-top:0; }
 
   #ficharo-root{ padding: 4px 18px 60px; }
   #ficharo-root *{ box-sizing:border-box; }
@@ -119,6 +149,14 @@
   .fr-view-tab:hover{ color: var(--ink); }
   .fr-view-tab.active{ background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .fr-view-tab:focus-visible{ outline:2px solid var(--green-deep); outline-offset:2px; }
+
+  .fr-scope-tabs{ max-width:1080px; margin: 0 auto 14px; display:flex; gap:6px; }
+  .fr-scope-tab{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+    font-weight:600; background:none; color: var(--ink-soft); border:none; border-bottom:2px solid transparent;
+    padding:6px 4px 8px; cursor:pointer;
+  }
+  .fr-scope-tab.active{ color: var(--green-deep); border-bottom-color: var(--green-deep); }
 
   .fr-toolbar{ max-width:1080px; margin: 0 auto 14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .fr-search-wrap{
@@ -316,6 +354,7 @@
 <div id="ficharo-root" style="display:none">
   <div class="fr-user-bar">
     <span id="fr-user-label"></span>
+    <button class="fr-gear-btn" id="fr-gear-btn" aria-label="Configurações da conta">⚙</button>
     <button class="fr-logout-btn" id="fr-logout-btn">Sair</button>
   </div>
 
@@ -327,6 +366,7 @@
   <div class="fr-view-tabs" id="fr-view-tabs"></div>
 
   <div id="fr-view-recipes">
+    <div class="fr-scope-tabs" id="fr-scope-tabs"></div>
     <div class="fr-toolbar">
       <div class="fr-search-wrap">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#262B1E" stroke-width="1.4"/><path d="M10.2 10.2L13.5 13.5" stroke="#262B1E" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -375,11 +415,16 @@
 
   let recipes = [];
   let recipesLoaded = false;
+  let personalRecipes = [];
+  let personalRecipesLoaded = false;
+  let recipeScope = 'shared'; // 'shared' | 'personal'
   let currentDayLogs = [];
   let targets = {};
   let targetsLoaded = false;
   let foods = [];
   let foodsLoaded = false;
+  let linkedProfessional = null;
+  let myClients = [];
 
   let activeCat = 'todas';
   let searchTerm = '';
@@ -526,6 +571,127 @@
   document.getElementById('fr-logout-btn').addEventListener('click', async ()=>{
     await sb.auth.signOut();
   });
+  document.getElementById('fr-gear-btn').addEventListener('click', openSettingsModal);
+
+  async function loadProfessionalLinkStatus(){
+    const { data: linkRow } = await sb.from('professional_clients').select('*').eq('client_id', currentUser.id).maybeSingle();
+    if(linkRow){
+      const { data: profRow } = await sb.from('profiles').select('*').eq('id', linkRow.professional_id).maybeSingle();
+      linkedProfessional = profRow ? { ...profRow, linkId: linkRow.id } : { linkId: linkRow.id };
+    } else {
+      linkedProfessional = null;
+    }
+  }
+
+  async function loadMyClients(){
+    if(!currentProfile || !currentProfile.is_professional){ myClients = []; return; }
+    const { data: links } = await sb.from('professional_clients').select('*').eq('professional_id', currentUser.id);
+    if(!links || links.length===0){ myClients = []; return; }
+    const clientIds = links.map(l=>l.client_id);
+    const { data: profs } = await sb.from('profiles').select('*').in('id', clientIds);
+    myClients = links.map(l=>{
+      const p = (profs||[]).find(pp=>pp.id===l.client_id);
+      return { linkId: l.id, client_id: l.client_id, email: p ? p.email : '(sem nome)' };
+    }).sort((a,b)=> a.email.localeCompare(b.email,'pt-BR'));
+  }
+
+  function openSettingsModal(){
+    const isPro = currentProfile && currentProfile.is_professional;
+    let html = '';
+
+    if(isPro){
+      html += `
+      <div class="fr-settings-section">
+        <h4>Seu código de profissional</h4>
+        <div class="fr-code-box">
+          <div class="fr-code-label">Compartilhe com seus clientes</div>
+          <div class="fr-code-val">${esc(currentProfile.professional_code || '—')}</div>
+        </div>
+        <div id="fr-clients-list"></div>
+      </div>`;
+    }
+
+    html += `
+      <div class="fr-settings-section">
+        <h4>Profissional vinculado</h4>
+        <div id="fr-linked-area"></div>
+      </div>`;
+
+    const overlay = buildOverlay(`<h3 class="fr-form-title">Configurações da conta</h3>${html}`);
+
+    if(isPro){
+      renderClientsList(overlay);
+    }
+    renderLinkedArea(overlay);
+  }
+
+  function renderClientsList(overlay){
+    const el = overlay.querySelector('#fr-clients-list');
+    if(myClients.length===0){
+      el.innerHTML = `<p class="fr-hint">Nenhum cliente vinculado ainda.</p>`;
+      return;
+    }
+    el.innerHTML = `<div class="fr-hint" style="margin-bottom:8px;">Meus clientes (${myClients.length})</div>` +
+      myClients.map(c=>`<div class="fr-client-row" data-client="${c.client_id}"><span class="fr-client-name">${esc(c.email)}</span><span class="fr-client-arrow">›</span></div>`).join('');
+    el.querySelectorAll('.fr-client-row').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        const clientId = row.getAttribute('data-client');
+        const client = myClients.find(c=>c.client_id===clientId);
+        closeOverlay();
+        openClientRecipesModal(client);
+      });
+    });
+  }
+
+  function renderLinkedArea(overlay){
+    const el = overlay.querySelector('#fr-linked-area');
+    if(linkedProfessional){
+      el.innerHTML = `
+        <div class="fr-linked-card">
+          <div>
+            <div class="fr-linked-name">${esc(linkedProfessional.email || 'Profissional')}</div>
+            <div class="fr-linked-role">${esc(linkedProfessional.professional_label || 'Profissional')}</div>
+          </div>
+          <button class="fr-btn-ghost" id="fr-unlink-btn">Desvincular</button>
+        </div>`;
+      el.querySelector('#fr-unlink-btn').addEventListener('click', async function(){
+        const btn = this; btn.disabled = true; btn.textContent = 'Desvinculando...';
+        const { error } = await sb.from('professional_clients').delete().eq('id', linkedProfessional.linkId);
+        if(error){ showToast('Não foi possível desvincular agora.', 'err'); btn.disabled=false; btn.textContent='Desvincular'; return; }
+        linkedProfessional = null;
+        showToast('Desvinculado.', 'ok');
+        renderLinkedArea(overlay);
+      });
+    } else {
+      el.innerHTML = `
+        <p class="fr-hint" style="margin-bottom:10px;">Nenhum profissional vinculado ainda.</p>
+        <div class="fr-field"><label for="fr-pro-code">Código do profissional</label><input type="text" id="fr-pro-code" placeholder="Ex.: 7F3K2A" style="text-transform:uppercase;"></div>
+        <button class="fr-btn-primary" id="fr-link-btn" style="width:100%;">Vincular</button>
+        <div id="fr-link-msg"></div>`;
+      el.querySelector('#fr-link-btn').addEventListener('click', async function(){
+        const codeInput = overlay.querySelector('#fr-pro-code');
+        const code = codeInput.value.trim().toUpperCase();
+        const msgEl = overlay.querySelector('#fr-link-msg');
+        if(!code){ codeInput.focus(); return; }
+        const btn = this; btn.disabled = true; btn.textContent = 'Buscando...';
+        const { data: prof, error: findErr } = await sb.from('profiles').select('*').eq('professional_code', code).eq('is_professional', true).maybeSingle();
+        if(findErr || !prof){
+          msgEl.innerHTML = `<p class="fr-hint" style="color:var(--rust);margin-top:8px;">Código não encontrado. Confira com o profissional.</p>`;
+          btn.disabled = false; btn.textContent = 'Vincular';
+          return;
+        }
+        const { error: linkErr } = await sb.from('professional_clients').insert({ professional_id: prof.id, client_id: currentUser.id });
+        if(linkErr){
+          msgEl.innerHTML = `<p class="fr-hint" style="color:var(--rust);margin-top:8px;">Não foi possível vincular agora. Tente novamente.</p>`;
+          btn.disabled = false; btn.textContent = 'Vincular';
+          return;
+        }
+        await loadProfessionalLinkStatus();
+        showToast('Vinculado com sucesso.', 'ok');
+        renderLinkedArea(overlay);
+      });
+    }
+  }
 
   let hasBooted = false;
   sb.auth.onAuthStateChange((event, session)=>{
@@ -568,8 +734,12 @@
     renderViewTabs();
     renderPrimaryAction();
     renderTabs();
+    renderScopeTabs();
     loadRecipes();
+    loadPersonalRecipes();
     loadFoods();
+    loadProfessionalLinkStatus();
+    loadMyClients();
     if(currentView==='diary') renderDiary();
     if(!currentProfile.onboarding_done){
       try{
@@ -593,9 +763,10 @@
   function renderPrimaryAction(){
     const btn = document.getElementById('fr-primary-action');
     if(currentView==='recipes'){
-      if(!isAdmin){ btn.style.display='none'; return; }
+      const canAdd = recipeScope==='shared' ? isAdmin : true;
+      if(!canAdd){ btn.style.display='none'; return; }
       btn.style.display='';
-      btn.innerHTML = PLUS_SVG + ' Nova receita';
+      btn.innerHTML = PLUS_SVG + (recipeScope==='shared' ? ' Nova receita' : ' Nova receita particular');
       btn.onclick = openAddModal;
     } else {
       btn.style.display='';
@@ -609,8 +780,27 @@
     document.getElementById('fr-view-diary').style.display = view==='diary' ? '' : 'none';
     renderViewTabs();
     renderPrimaryAction();
+    if(view==='recipes') renderScopeTabs();
     if(view==='diary') renderDiary();
   }
+
+  function renderScopeTabs(){
+    const tabs = [['shared','Receitas do app'], ['personal','Minhas receitas']];
+    document.getElementById('fr-scope-tabs').innerHTML = tabs.map(t=>
+      `<button class="fr-scope-tab ${recipeScope===t[0]?'active':''}" data-scope="${t[0]}">${t[1]}</button>`
+    ).join('');
+    document.querySelectorAll('.fr-scope-tab').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        recipeScope = btn.getAttribute('data-scope');
+        renderScopeTabs();
+        renderPrimaryAction();
+        renderGrid();
+      });
+    });
+  }
+  function activeRecipeList(){ return recipeScope==='shared' ? recipes : personalRecipes; }
+  function activeRecipesLoaded(){ return recipeScope==='shared' ? recipesLoaded : personalRecipesLoaded; }
+  function canEditActiveScope(){ return recipeScope==='shared' ? isAdmin : true; }
 
   /* ---------- Recipes ---------- */
   function renderTabs(){
@@ -627,7 +817,7 @@
   }
 
   function filteredRecipes(){
-    return recipes.filter(r=>{
+    return activeRecipeList().filter(r=>{
       const matchCat = activeCat==='todas' || r.category===activeCat;
       const matchSearch = !searchTerm || normalize(r.name).includes(normalize(searchTerm));
       return matchCat && matchSearch;
@@ -635,17 +825,20 @@
   }
 
   function renderGrid(){
-    if(!recipesLoaded){ content.innerHTML = `<div class="fr-loading">Carregando fichário...</div>`; return; }
+    if(!activeRecipesLoaded()){ content.innerHTML = `<div class="fr-loading">Carregando fichário...</div>`; return; }
     const list = filteredRecipes();
+    const canAdd = canEditActiveScope();
     if(list.length===0){
-      if(recipes.length===0){
+      if(activeRecipeList().length===0){
+        const emptyTitle = recipeScope==='personal' ? 'Você ainda não tem receitas particulares' : (isAdmin ? 'Seu fichário está vazio' : 'Ainda não há receitas');
+        const emptyDesc = recipeScope==='personal' ? 'Cadastre aqui receitas que só você vai ver, como as que seu nutricionista passar.' : (isAdmin ? 'Cadastre as receitas das suas marmitas e refeições para buscar pelo nome sempre que precisar.' : 'Assim que forem cadastradas, as receitas aparecem aqui.');
         content.innerHTML = `
           <div class="fr-empty">
-            <h3>${isAdmin ? 'Seu fichário está vazio' : 'Ainda não há receitas'}</h3>
-            <p>${isAdmin ? 'Cadastre as receitas das suas marmitas e refeições para buscar pelo nome sempre que precisar.' : 'Assim que forem cadastradas, as receitas aparecem aqui.'}</p>
-            ${isAdmin ? '<button id="fr-empty-add">+ Cadastrar primeira receita</button>' : ''}
+            <h3>${emptyTitle}</h3>
+            <p>${emptyDesc}</p>
+            ${canAdd ? '<button id="fr-empty-add">+ Cadastrar primeira receita</button>' : ''}
           </div>`;
-        if(isAdmin) document.getElementById('fr-empty-add').addEventListener('click', openAddModal);
+        if(canAdd) document.getElementById('fr-empty-add').addEventListener('click', openAddModal);
       } else {
         content.innerHTML = `<div class="fr-empty"><h3>Nenhuma receita encontrada</h3><p>Tente outro termo de busca ou escolha outra categoria.</p></div>`;
       }
@@ -678,13 +871,16 @@
   function linesToItems(text){ return (text||'').split('\n').map(s=>s.trim()).filter(Boolean); }
 
   function openDetail(id){
-    const r = recipes.find(x=>x.id===id);
+    const r = activeRecipeList().find(x=>x.id===id);
     if(!r) return;
     const cat = CATS[r.category] || CATS.todas;
     const ingredients = linesToItems(r.ingredients);
+    const canEdit = canEditActiveScope();
+    const tableName = recipeScope==='shared' ? 'recipes' : 'personal_recipes';
     const overlay = buildOverlay(`
       <div class="fr-detail-tab" style="background:${cat.color}">${esc(cat.label)}</div>
       <h2 class="fr-detail-name">${esc(r.name)}</h2>
+      ${recipeScope==='personal' && r.assigned_by_professional_id ? `<div class="fr-hint" style="color:var(--green-deep);font-weight:600;">Adicionada por seu profissional vinculado</div>` : ''}
       ${r.portions ? `<div class="fr-hint">Rende ${esc(r.portions)} porção(ões)</div>` : ''}
       <div class="fr-nutrition">
         <div><span class="fr-nut-val">${esc(r.calories ?? '—')}</span><span class="fr-nut-label">kcal</span></div>
@@ -695,13 +891,13 @@
       ${ingredients.length ? `<div class="fr-detail-section"><h4>Ingredientes</h4><ul>${ingredients.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : ''}
       ${r.instructions ? `<div class="fr-detail-section"><h4>Modo de preparo</h4><div class="fr-detail-pre">${esc(r.instructions)}</div></div>` : ''}
       ${r.notes ? `<div class="fr-detail-notes">${esc(r.notes)}</div>` : ''}
-      ${isAdmin ? `
+      ${canEdit ? `
       <div class="fr-form-actions" id="fr-detail-actions">
         <button class="fr-btn-danger" id="fr-delete-btn">Excluir receita</button>
         <button class="fr-btn-primary" id="fr-edit-btn">Editar</button>
       </div>` : ''}
     `);
-    if(!isAdmin) return;
+    if(!canEdit) return;
     overlay.querySelector('#fr-delete-btn').addEventListener('click', function(){
       const actionsEl = overlay.querySelector('#fr-detail-actions');
       actionsEl.innerHTML = `
@@ -713,9 +909,9 @@
       actionsEl.querySelector('#fr-cancel-delete').addEventListener('click', ()=> openDetail(id));
       actionsEl.querySelector('#fr-confirm-delete').addEventListener('click', async function(){
         const btn = this; btn.disabled = true; btn.textContent = 'Excluindo...';
-        const { error } = await sb.from('recipes').delete().eq('id', id);
+        const { error } = await sb.from(tableName).delete().eq('id', id);
         if(error){ showToast('Não foi possível excluir. Tente novamente.', 'err'); btn.disabled=false; btn.textContent='Tentar de novo'; return; }
-        recipes = recipes.filter(x=>x.id!==id);
+        if(recipeScope==='shared'){ recipes = recipes.filter(x=>x.id!==id); } else { personalRecipes = personalRecipes.filter(x=>x.id!==id); }
         showToast('Receita excluída.', 'ok');
         closeOverlay();
         renderGrid();
@@ -743,14 +939,16 @@
     document.removeEventListener('keydown', escListener);
   }
 
-  function openAddModal(){ if(isAdmin) openFormModal(null); }
+  function openAddModal(){ if(canEditActiveScope()) openFormModal(null); }
 
   function openFormModal(existing){
-    if(!isAdmin) return;
+    if(!canEditActiveScope()) return;
     const isEdit = !!existing;
+    const scope = recipeScope;
+    const tableName = scope==='shared' ? 'recipes' : 'personal_recipes';
     const r = existing || { category:'marmita', portions:1 };
     const overlay = buildOverlay(`
-      <h3 class="fr-form-title">${isEdit ? 'Editar receita' : 'Nova receita'}</h3>
+      <h3 class="fr-form-title">${isEdit ? 'Editar receita' : (scope==='shared' ? 'Nova receita' : 'Nova receita particular')}</h3>
       <form id="fr-form">
         <div class="fr-field"><label for="fr-f-name">Nome do prato</label><input type="text" id="fr-f-name" required value="${esc(r.name||'')}" placeholder="ex.: Frango xadrez com arroz integral"></div>
         <div class="fr-row">
@@ -796,14 +994,16 @@
       submitBtn.disabled = true; submitBtn.textContent = 'Salvando...';
       try{
         if(isEdit){
-          const { error } = await sb.from('recipes').update(payload).eq('id', r.id);
+          const { error } = await sb.from(tableName).update(payload).eq('id', r.id);
           if(error) throw error;
-          recipes = recipes.map(x=> x.id===r.id ? {...x, ...payload} : x);
+          if(scope==='shared'){ recipes = recipes.map(x=> x.id===r.id ? {...x, ...payload} : x); }
+          else { personalRecipes = personalRecipes.map(x=> x.id===r.id ? {...x, ...payload} : x); }
         } else {
-          payload.created_by = currentUser.id;
-          const { data, error } = await sb.from('recipes').insert(payload).select().single();
+          if(scope==='shared'){ payload.created_by = currentUser.id; }
+          else { payload.owner_id = currentUser.id; }
+          const { data, error } = await sb.from(tableName).insert(payload).select().single();
           if(error) throw error;
-          recipes.push(data);
+          if(scope==='shared'){ recipes.push(data); } else { personalRecipes.push(data); }
         }
         showToast('Receita salva.', 'ok');
         closeOverlay();
@@ -818,6 +1018,119 @@
     setTimeout(()=> document.getElementById('fr-f-name').focus(), 30);
   }
 
+  async function openClientRecipesModal(client){
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Receitas de ${esc(client.email)}</h3>
+      <button class="fr-btn-primary" id="fr-client-add-recipe" style="width:100%;margin-bottom:16px;">${PLUS_SVG} Nova receita para ${esc(client.email)}</button>
+      <div id="fr-client-recipes-list"><div class="fr-loading">Carregando...</div></div>
+    `);
+    overlay.querySelector('#fr-client-add-recipe').addEventListener('click', ()=>{
+      closeOverlay();
+      openClientRecipeForm(client, null);
+    });
+
+    const { data, error } = await sb.from('personal_recipes').select('*').eq('owner_id', client.client_id).order('name');
+    const listEl = overlay.querySelector('#fr-client-recipes-list');
+    if(error){ listEl.innerHTML = `<p class="fr-hint">Não foi possível carregar.</p>`; return; }
+    const list = data || [];
+    if(list.length===0){
+      listEl.innerHTML = `<p class="fr-hint">Nenhuma receita cadastrada pra esse cliente ainda.</p>`;
+      return;
+    }
+    listEl.innerHTML = list.map(r=>{
+      const cat = CATS[r.category] || CATS.todas;
+      return `<div class="fr-client-row" data-id="${r.id}"><span class="fr-client-name">${esc(r.name)} <span style="color:${cat.color};font-family:'IBM Plex Mono',monospace;font-size:10px;">· ${esc(cat.label)}</span></span><span class="fr-client-arrow">›</span></div>`;
+    }).join('');
+    listEl.querySelectorAll('.fr-client-row').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        const recipe = list.find(r=>r.id===row.getAttribute('data-id'));
+        closeOverlay();
+        openClientRecipeForm(client, recipe);
+      });
+    });
+  }
+
+  function openClientRecipeForm(client, existing){
+    const isEdit = !!existing;
+    const r = existing || { category:'marmita', portions:1 };
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">${isEdit ? 'Editar' : 'Nova'} receita — ${esc(client.email)}</h3>
+      <form id="fr-cform">
+        <div class="fr-field"><label for="fr-cf-name">Nome do prato</label><input type="text" id="fr-cf-name" required value="${esc(r.name||'')}"></div>
+        <div class="fr-row">
+          <div class="fr-field"><label for="fr-cf-cat">Categoria</label>
+            <select id="fr-cf-cat">${Object.keys(CATS).filter(k=>k!=='todas').map(k=>`<option value="${k}" ${r.category===k?'selected':''}>${esc(CATS[k].label)}</option>`).join('')}</select>
+          </div>
+          <div class="fr-field"><label for="fr-cf-portions">Porções que rende</label><input type="number" min="1" id="fr-cf-portions" value="${esc(r.portions||1)}"></div>
+        </div>
+        <div class="fr-row4">
+          <div class="fr-field"><label for="fr-cf-cal">Kcal</label><input type="number" min="0" id="fr-cf-cal" value="${esc(r.calories ?? '')}"></div>
+          <div class="fr-field"><label for="fr-cf-prot">Proteína (g)</label><input type="number" min="0" id="fr-cf-prot" value="${esc(r.protein ?? '')}"></div>
+          <div class="fr-field"><label for="fr-cf-carb">Carbo (g)</label><input type="number" min="0" id="fr-cf-carb" value="${esc(r.carbs ?? '')}"></div>
+          <div class="fr-field"><label for="fr-cf-fat">Gordura (g)</label><input type="number" min="0" id="fr-cf-fat" value="${esc(r.fat ?? '')}"></div>
+        </div>
+        <div class="fr-field"><label for="fr-cf-ing">Ingredientes (um por linha)</label><textarea id="fr-cf-ing">${esc(r.ingredients||'')}</textarea></div>
+        <div class="fr-field"><label for="fr-cf-inst">Modo de preparo</label><textarea id="fr-cf-inst">${esc(r.instructions||'')}</textarea></div>
+        <div class="fr-field"><label for="fr-cf-notes">Notas</label><textarea id="fr-cf-notes" style="min-height:50px">${esc(r.notes||'')}</textarea></div>
+        <div class="fr-form-actions">
+          ${isEdit ? '<button type="button" class="fr-btn-danger" id="fr-cf-delete">Excluir</button>' : '<button type="button" class="fr-btn-ghost" id="fr-cf-back">Voltar</button>'}
+          <button type="submit" class="fr-btn-primary">${isEdit ? 'Salvar alterações' : 'Salvar receita'}</button>
+        </div>
+      </form>
+    `);
+    const backBtn = overlay.querySelector('#fr-cf-back') || overlay.querySelector('#fr-cf-delete');
+    if(overlay.querySelector('#fr-cf-back')){
+      overlay.querySelector('#fr-cf-back').addEventListener('click', ()=>{ closeOverlay(); openClientRecipesModal(client); });
+    }
+    if(overlay.querySelector('#fr-cf-delete')){
+      overlay.querySelector('#fr-cf-delete').addEventListener('click', async function(){
+        const btn = this; btn.disabled = true; btn.textContent = 'Excluindo...';
+        const { error } = await sb.from('personal_recipes').delete().eq('id', existing.id);
+        if(error){ showToast('Não foi possível excluir.', 'err'); btn.disabled=false; btn.textContent='Excluir'; return; }
+        showToast('Receita excluída.', 'ok');
+        closeOverlay();
+        openClientRecipesModal(client);
+      });
+    }
+    overlay.querySelector('#fr-cform').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const submitBtn = overlay.querySelector('button[type="submit"]');
+      const name = document.getElementById('fr-cf-name').value.trim();
+      if(!name){ document.getElementById('fr-cf-name').focus(); return; }
+      const payload = {
+        name,
+        category: document.getElementById('fr-cf-cat').value,
+        portions: numOrNull(document.getElementById('fr-cf-portions').value),
+        calories: numOrNull(document.getElementById('fr-cf-cal').value),
+        protein: numOrNull(document.getElementById('fr-cf-prot').value),
+        carbs: numOrNull(document.getElementById('fr-cf-carb').value),
+        fat: numOrNull(document.getElementById('fr-cf-fat').value),
+        ingredients: document.getElementById('fr-cf-ing').value,
+        instructions: document.getElementById('fr-cf-inst').value,
+        notes: document.getElementById('fr-cf-notes').value
+      };
+      submitBtn.disabled = true; submitBtn.textContent = 'Salvando...';
+      try{
+        if(isEdit){
+          const { error } = await sb.from('personal_recipes').update(payload).eq('id', existing.id);
+          if(error) throw error;
+        } else {
+          payload.owner_id = client.client_id;
+          payload.assigned_by_professional_id = currentUser.id;
+          const { error } = await sb.from('personal_recipes').insert(payload);
+          if(error) throw error;
+        }
+        showToast('Receita salva.', 'ok');
+        closeOverlay();
+        openClientRecipesModal(client);
+      }catch(err){
+        console.error(err);
+        showToast('Não foi possível salvar agora. Tente novamente.', 'err');
+        submitBtn.disabled = false;
+        submitBtn.textContent = isEdit ? 'Salvar alterações' : 'Salvar receita';
+      }
+    });
+  }
   function openOnboardingModal(){
     const p = currentProfile || {};
     const overlay = buildOverlay(`
@@ -917,6 +1230,14 @@
     recipesLoaded = true;
     if(error) showToast('Não foi possível carregar as receitas.', 'err');
     renderGrid();
+  }
+
+  async function loadPersonalRecipes(){
+    personalRecipesLoaded = false;
+    const { data, error } = await sb.from('personal_recipes').select('*').eq('owner_id', currentUser.id).order('name');
+    personalRecipes = error ? [] : (data || []);
+    personalRecipesLoaded = true;
+    if(recipeScope==='personal') renderGrid();
   }
 
   /* ---------- Diary ---------- */
