@@ -116,6 +116,47 @@
   }
   .fr-settings-section:first-child h4{ border-top:none; padding-top:0; }
 
+  .fr-suggestion{ background:#FFFEFA; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+  .fr-suggestion-head{ margin-bottom:5px; }
+  .fr-suggestion-name{ font-family:'Fraunces',serif; font-weight:600; font-size:14.5px; }
+  .fr-suggestion-macros{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); margin-bottom:10px; }
+  .fr-suggestion-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .fr-ing-row{ display:grid; grid-template-columns: 62px 96px 1fr 28px; gap:6px; margin-bottom:8px; align-items:center; }
+  .fr-ing-row input, .fr-ing-row select{
+    padding:7px 8px; font-size:12.5px; border:1px solid var(--border); border-radius:6px; background:#FFFEFA;
+    font-family:'Inter',sans-serif; color:var(--ink); width:100%;
+  }
+  .fr-ing-remove{ background:none; border:none; color:var(--ink-soft); font-size:18px; cursor:pointer; line-height:1; }
+  .fr-ing-remove:hover{ color:var(--rust); }
+  @media (max-width:480px){
+    .fr-ing-row{ grid-template-columns: 54px 84px 1fr 24px; }
+  }
+
+  .fr-shop-row{ display:flex; justify-content:space-between; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; box-shadow:var(--shadow); }
+  .fr-shop-row-name{ font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .fr-shop-row-name small{ color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:10px; }
+  .fr-shop-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .fr-shop-qty-input{ width:56px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-family:'IBM Plex Mono',monospace; text-align:center; background:#FFFEFA; }
+  .fr-shop-list{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; box-shadow:var(--shadow); }
+  .fr-shop-item{ display:flex; justify-content:space-between; font-size:14px; padding:6px 0; border-bottom:1px dashed var(--border); }
+  .fr-shop-item:last-child{ border-bottom:none; }
+  .fr-shop-item b{ font-family:'IBM Plex Mono',monospace; font-weight:600; }
+
+  .fr-exercise{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .fr-exercise-head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .fr-exercise-num{ width:22px; height:22px; border-radius:50%; background:var(--green-deep); color:#F6F1DF; font-family:'IBM Plex Mono',monospace; font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .fr-exercise-name{ font-family:'Fraunces',serif; font-weight:600; font-size:16px; }
+  .fr-exercise-meta{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); margin-bottom:8px; }
+  .fr-exercise-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .fr-chip{ font-family:'Inter',sans-serif; font-weight:600; font-size:12px; border-radius:6px; padding:7px 11px; border:none; cursor:pointer; }
+  .fr-chip-video{ background:var(--paper-deep); color:var(--ink); }
+  .fr-chip-timer{ background:var(--mustard); color:#fff; }
+  .fr-chip-upload{ background:none; color:var(--green-deep); border:1px solid var(--green-deep); }
+  .fr-timer-box{ background:#FFFEFA; border:1px solid var(--border); border-radius:10px; padding:16px; text-align:center; margin-top:10px; }
+  .fr-timer-num{ font-family:'Fraunces',serif; font-weight:700; font-size:32px; color:var(--green-deep); }
+  .fr-timer-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); }
+
   #ficharo-root{ padding: 4px 18px 60px; }
   #ficharo-root *{ box-sizing:border-box; }
 
@@ -346,6 +387,14 @@
     <form id="auth-form">
       <div class="fr-field"><label for="auth-email">E-mail</label><input type="email" id="auth-email" required autocomplete="email"></div>
       <div class="fr-field"><label for="auth-password">Senha</label><input type="password" id="auth-password" required minlength="6" autocomplete="current-password"></div>
+      <div class="fr-field" id="auth-role-field" style="display:none;">
+        <label for="auth-role">Você é...</label>
+        <select id="auth-role">
+          <option value="cliente">Uma pessoa usando pra mim / minha família</option>
+          <option value="nutricionista">Nutricionista</option>
+          <option value="personal">Personal trainer</option>
+        </select>
+      </div>
       <button type="submit" class="fr-btn-primary" id="auth-submit" style="width:100%">Entrar</button>
     </form>
   </div>
@@ -365,7 +414,7 @@
 
   <div class="fr-view-tabs" id="fr-view-tabs"></div>
 
-  <div id="fr-view-recipes">
+  <div id="fr-view-recipes" style="display:none">
     <div class="fr-scope-tabs" id="fr-scope-tabs"></div>
     <div class="fr-toolbar">
       <div class="fr-search-wrap">
@@ -378,10 +427,18 @@
     <div id="fr-content"></div>
   </div>
 
-  <div id="fr-view-diary" style="display:none">
+  <div id="fr-view-diary">
     <div class="fr-date-nav" id="fr-date-nav"></div>
     <div class="fr-summary" id="fr-summary"></div>
     <div id="fr-diary-content"></div>
+  </div>
+
+  <div id="fr-view-shopping" style="display:none">
+    <div id="fr-shopping-content"></div>
+  </div>
+
+  <div id="fr-view-workouts" style="display:none">
+    <div id="fr-workouts-content"></div>
   </div>
 </div>
 
@@ -425,10 +482,12 @@
   let foodsLoaded = false;
   let linkedProfessional = null;
   let myClients = [];
+  let workouts = [];
+  let workoutsLoaded = false;
 
   let activeCat = 'todas';
   let searchTerm = '';
-  let currentView = 'recipes';
+  let currentView = 'diary';
   let currentDate = todayStr();
 
   const root = document.getElementById('ficharo-root');
@@ -529,6 +588,7 @@
     authTabLogin.classList.toggle('active', mode==='login');
     authTabSignup.classList.toggle('active', mode==='signup');
     authSubmit.textContent = mode==='login' ? 'Entrar' : 'Criar conta';
+    document.getElementById('auth-role-field').style.display = mode==='signup' ? '' : 'none';
     authMessage.hidden = true;
   }
   authTabLogin.addEventListener('click', ()=> setAuthMode('login'));
@@ -553,10 +613,15 @@
           showAuthMessage(error.message==='Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message, 'err');
         }
       } else {
+        const role = document.getElementById('auth-role').value;
         const { data, error } = await sb.auth.signUp({ email, password });
         if(error){
           showAuthMessage(error.message, 'err');
-        } else if(!data.session){
+        } else if(role !== 'cliente'){
+          // guarda a escolha pra aplicar assim que o perfil existir (agora ou no 1º login)
+          localStorage.setItem('saber_pending_role_' + email.toLowerCase(), role);
+        }
+        if(!error && !data.session){
           setAuthMode('login');
           showAuthMessage('Conta criada! Verifique seu e-mail para confirmar antes de entrar.', 'ok');
         }
@@ -617,12 +682,72 @@
         <div id="fr-linked-area"></div>
       </div>`;
 
+    if(isAdmin){
+      html += `
+      <div class="fr-settings-section">
+        <h4>Sugestões de alimentos</h4>
+        <div id="fr-suggestions-area"><div class="fr-loading">Carregando...</div></div>
+      </div>`;
+    }
+
     const overlay = buildOverlay(`<h3 class="fr-form-title">Configurações da conta</h3>${html}`);
 
     if(isPro){
       renderClientsList(overlay);
     }
     renderLinkedArea(overlay);
+    if(isAdmin){
+      renderSuggestionsArea(overlay);
+    }
+  }
+
+  async function renderSuggestionsArea(overlay){
+    const el = overlay.querySelector('#fr-suggestions-area');
+    const { data, error } = await sb.from('food_suggestions').select('*').eq('status', 'pending').order('created_at');
+    if(error){ el.innerHTML = `<p class="fr-hint">Não foi possível carregar.</p>`; return; }
+    const list = data || [];
+    if(list.length===0){
+      el.innerHTML = `<p class="fr-hint">Nenhuma sugestão pendente.</p>`;
+      return;
+    }
+    el.innerHTML = list.map(s=>`
+      <div class="fr-suggestion" data-id="${s.id}">
+        <div class="fr-suggestion-head">
+          <span class="fr-suggestion-name">${esc(s.name)}</span>
+        </div>
+        <div class="fr-suggestion-macros">${Math.round(s.kcal||0)} kcal · P:${Math.round(s.protein||0)}g C:${Math.round(s.carbs||0)}g G:${Math.round(s.fat||0)}g <i>(por porção informada)</i></div>
+        <div class="fr-suggestion-actions">
+          <button class="fr-btn-primary" data-action="approve" data-id="${s.id}" style="font-size:12px;padding:7px 12px;">Aprovar e adicionar</button>
+          <button class="fr-btn-danger" data-action="reject" data-id="${s.id}" style="font-size:12px;padding:7px 12px;">Rejeitar</button>
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('button[data-action]').forEach(btn=>{
+      btn.addEventListener('click', async function(){
+        const id = this.getAttribute('data-id');
+        const action = this.getAttribute('data-action');
+        const suggestion = list.find(s=>s.id===id);
+        this.disabled = true; this.textContent = '...';
+        try{
+          if(action==='approve'){
+            const { error: insErr } = await sb.from('foods').insert({
+              name: suggestion.name, category: null,
+              kcal: suggestion.kcal || 0, protein: suggestion.protein || 0,
+              carbs: suggestion.carbs || 0, fat: suggestion.fat || 0
+            });
+            if(insErr) throw insErr;
+            foodsLoaded = false; loadFoods();
+          }
+          const { error: updErr } = await sb.from('food_suggestions').update({ status: action==='approve' ? 'approved' : 'rejected', reviewed_at: new Date().toISOString() }).eq('id', id);
+          if(updErr) throw updErr;
+          showToast(action==='approve' ? 'Adicionado à base de alimentos.' : 'Sugestão rejeitada.', 'ok');
+          overlay.querySelector(`.fr-suggestion[data-id="${id}"]`).remove();
+        }catch(err){
+          console.error(err);
+          showToast('Não foi possível concluir. Tente novamente.', 'err');
+          this.disabled = false; this.textContent = action==='approve' ? 'Aprovar e adicionar' : 'Rejeitar';
+        }
+      });
+    });
   }
 
   function renderClientsList(overlay){
@@ -719,11 +844,27 @@
     }
     currentProfile = data;
     isAdmin = !!(data && data.is_admin);
+
+    const pendingKey = 'saber_pending_role_' + currentUser.email.toLowerCase();
+    const pendingRole = localStorage.getItem(pendingKey);
+    if(pendingRole && !currentProfile.is_professional){
+      const label = pendingRole === 'nutricionista' ? 'Nutricionista' : (pendingRole === 'personal' ? 'Personal trainer' : null);
+      if(label){
+        const { data: updated, error } = await sb.from('profiles')
+          .update({ is_professional: true, professional_label: label })
+          .eq('id', currentUser.id).select().single();
+        if(!error && updated){ currentProfile = updated; }
+      }
+      localStorage.removeItem(pendingKey);
+    }
   }
 
   function renderUserBar(){
     const label = document.getElementById('fr-user-label');
-    label.innerHTML = `${esc(currentUser.email)} ${isAdmin ? '<span class="fr-admin-badge">admin</span>' : ''}`;
+    const badges = [];
+    if(isAdmin) badges.push('<span class="fr-admin-badge">admin</span>');
+    if(currentProfile && currentProfile.is_professional) badges.push(`<span class="fr-admin-badge" style="background:var(--blue)">${esc(currentProfile.professional_label || 'Profissional')}</span>`);
+    label.innerHTML = `${esc(currentUser.email)} ${badges.join(' ')}`;
   }
 
   async function boot(){
@@ -740,6 +881,7 @@
     loadFoods();
     loadProfessionalLinkStatus();
     loadMyClients();
+    loadWorkouts();
     if(currentView==='diary') renderDiary();
     if(!currentProfile.onboarding_done){
       try{
@@ -752,7 +894,7 @@
 
   /* ---------- View switching ---------- */
   function renderViewTabs(){
-    const tabs = [['recipes','Fichário de Receitas'], ['diary','Diário do Dia']];
+    const tabs = [['diary','Diário do Dia'], ['recipes','Receitas'], ['shopping','Lista de Compras'], ['workouts','Treinos']];
     document.getElementById('fr-view-tabs').innerHTML = tabs.map(t=>
       `<button class="fr-view-tab ${currentView===t[0]?'active':''}" data-view="${t[0]}">${t[1]}</button>`
     ).join('');
@@ -768,24 +910,439 @@
       btn.style.display='';
       btn.innerHTML = PLUS_SVG + (recipeScope==='shared' ? ' Nova receita' : ' Nova receita particular');
       btn.onclick = openAddModal;
-    } else {
+    } else if(currentView==='diary'){
       btn.style.display='';
       btn.innerHTML = PLUS_SVG + ' Registrar alimento';
       btn.onclick = openLogModal;
+    } else if(currentView==='workouts'){
+      const canAdd = isAdmin || (currentProfile && currentProfile.is_professional);
+      if(!canAdd){ btn.style.display='none'; return; }
+      btn.style.display='';
+      btn.innerHTML = PLUS_SVG + ' Novo treino';
+      btn.onclick = openWorkoutFormModal;
+    } else {
+      btn.style.display='none';
     }
   }
   function switchView(view){
     currentView = view;
     document.getElementById('fr-view-recipes').style.display = view==='recipes' ? '' : 'none';
     document.getElementById('fr-view-diary').style.display = view==='diary' ? '' : 'none';
+    document.getElementById('fr-view-shopping').style.display = view==='shopping' ? '' : 'none';
+    document.getElementById('fr-view-workouts').style.display = view==='workouts' ? '' : 'none';
     renderViewTabs();
     renderPrimaryAction();
     if(view==='recipes') renderScopeTabs();
     if(view==='diary') renderDiary();
+    if(view==='shopping') renderShoppingView();
+    if(view==='workouts') renderWorkoutsView();
+  }
+
+  /* ---------- Lista de Compras ---------- */
+  let shoppingSearchTerm = '';
+  let shoppingQuantities = {};
+
+  function combinedRecipesForShopping(){
+    const shared = recipes.map(r=>({...r, _src:'shared'}));
+    const personal = personalRecipes.map(r=>({...r, _src:'personal'}));
+    return shared.concat(personal).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  }
+
+  function formatQty(n){
+    const rounded = Math.round(n*100)/100;
+    if(rounded % 1 === 0) return String(rounded);
+    return rounded.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+  }
+
+  function renderShoppingView(){
+    const el = document.getElementById('fr-shopping-content');
+    if(!recipesLoaded || !personalRecipesLoaded){ el.innerHTML = `<div class="fr-loading">Carregando receitas...</div>`; return; }
+    const list = combinedRecipesForShopping();
+    if(list.length===0){
+      el.innerHTML = `<div class="fr-empty"><h3>Nenhuma receita cadastrada ainda</h3><p>Cadastre receitas no Fichário pra poder gerar sua lista de compras.</p></div>`;
+      return;
+    }
+    el.innerHTML = `
+      <div class="fr-toolbar">
+        <div class="fr-search-wrap">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#262B1E" stroke-width="1.4"/><path d="M10.2 10.2L13.5 13.5" stroke="#262B1E" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input id="fr-shop-search" type="text" placeholder="buscar receita..." autocomplete="off">
+        </div>
+      </div>
+      <div class="fr-hint" style="margin-bottom:12px;">Informe quantas marmitas/porções você quer fazer de cada receita.</div>
+      <div id="fr-shop-recipe-list"></div>
+      <button class="fr-btn-primary" id="fr-shop-generate" style="width:100%;margin-top:16px;">Gerar lista de compras</button>
+      <div id="fr-shop-result" style="margin-top:20px;"></div>
+    `;
+    function renderRows(){
+      const norm = normalize(shoppingSearchTerm);
+      const filtered = list.filter(r=> !norm || normalize(r.name).includes(norm));
+      const rowsEl = document.getElementById('fr-shop-recipe-list');
+      if(filtered.length===0){ rowsEl.innerHTML = `<p class="fr-hint">Nenhuma receita encontrada.</p>`; return; }
+      rowsEl.innerHTML = filtered.map(r=>{
+        const cat = CATS[r.category] || CATS.todas;
+        const qty = shoppingQuantities[r.id] || '';
+        return `
+          <div class="fr-shop-row">
+            <div class="fr-shop-row-name"><span class="fr-shop-dot" style="background:${cat.color}"></span>${esc(r.name)} ${r._src==='personal' ? '<small>(particular)</small>' : ''}</div>
+            <input type="number" min="0" step="1" class="fr-shop-qty-input" data-id="${r.id}" placeholder="0" value="${esc(qty)}">
+          </div>`;
+      }).join('');
+      rowsEl.querySelectorAll('.fr-shop-qty-input').forEach(inp=>{
+        inp.addEventListener('input', ()=>{
+          const id = inp.getAttribute('data-id');
+          const v = parseFloat(inp.value);
+          if(!v || v<=0){ delete shoppingQuantities[id]; } else { shoppingQuantities[id] = v; }
+        });
+      });
+    }
+    renderRows();
+    document.getElementById('fr-shop-search').addEventListener('input', function(){
+      shoppingSearchTerm = this.value;
+      renderRows();
+    });
+    document.getElementById('fr-shop-generate').addEventListener('click', ()=> generateShoppingList(list));
+  }
+
+  function generateShoppingList(list){
+    const resultEl = document.getElementById('fr-shop-result');
+    const chosen = list.filter(r=> shoppingQuantities[r.id] > 0);
+    if(chosen.length===0){
+      resultEl.innerHTML = `<p class="fr-hint">Escolha ao menos uma receita com quantidade maior que zero.</p>`;
+      return;
+    }
+    const aggregated = new Map();
+    const freeform = new Map();
+    let anyMissingIngredients = false;
+    chosen.forEach(r=>{
+      const desired = shoppingQuantities[r.id];
+      const base = Number(r.portions) || 1;
+      const multiplier = desired / base;
+      const ings = r.ingredients_structured || [];
+      if(ings.length===0) anyMissingIngredients = true;
+      ings.forEach(ing=>{
+        if(ing.quantity===null || ing.quantity===undefined || ing.quantity===''){
+          const key = normalize(ing.item) + '|' + (ing.unit||'');
+          freeform.set(key, { item: ing.item, unit: ing.unit });
+          return;
+        }
+        const scaledQty = Number(ing.quantity) * multiplier;
+        const key = normalize(ing.item) + '|' + (ing.unit||'');
+        if(aggregated.has(key)){ aggregated.get(key).quantity += scaledQty; }
+        else { aggregated.set(key, { item: ing.item, unit: ing.unit, quantity: scaledQty }); }
+      });
+    });
+    const items = Array.from(aggregated.values()).sort((a,b)=>a.item.localeCompare(b.item,'pt-BR'));
+    const freeItems = Array.from(freeform.values()).sort((a,b)=>a.item.localeCompare(b.item,'pt-BR'));
+    if(items.length===0 && freeItems.length===0){
+      resultEl.innerHTML = `<p class="fr-hint">Nenhuma das receitas escolhidas tem ingredientes cadastrados ainda. Edite a receita e adicione os ingredientes pra gerar a lista.</p>`;
+      return;
+    }
+    resultEl.innerHTML = `
+      <h3 class="fr-form-title" style="font-size:17px;">Sua lista de compras</h3>
+      ${anyMissingIngredients ? `<div class="fr-hint" style="color:var(--rust);margin-bottom:10px;">Alguma receita escolhida ainda não tem ingredientes cadastrados — edite-a pra completar a lista.</div>` : ''}
+      <div class="fr-shop-list">
+        ${items.map(i=>`<div class="fr-shop-item"><span>${esc(i.item)}</span><b>${formatQty(i.quantity)} ${esc(i.unit||'')}</b></div>`).join('')}
+        ${freeItems.map(i=>`<div class="fr-shop-item"><span>${esc(i.item)}</span><b>${esc(i.unit||'a gosto')}</b></div>`).join('')}
+      </div>
+    `;
+  }
+
+  /* ---------- Treinos ---------- */
+  async function loadWorkouts(){
+    workoutsLoaded = false;
+    const { data, error } = await sb.from('workouts').select('*').order('created_at', { ascending: false });
+    workouts = error ? [] : (data || []);
+    workoutsLoaded = true;
+    if(currentView==='workouts') renderWorkoutsView();
+  }
+
+  function renderWorkoutsView(){
+    const el = document.getElementById('fr-workouts-content');
+    if(!workoutsLoaded){ el.innerHTML = `<div class="fr-loading">Carregando treinos...</div>`; return; }
+    if(workouts.length===0){
+      const canAdd = isAdmin || (currentProfile && currentProfile.is_professional);
+      el.innerHTML = `<div class="fr-empty"><h3>Nenhum treino ainda</h3><p>${canAdd ? 'Toque em "Novo treino" pra cadastrar o primeiro.' : 'Assim que seu personal cadastrar um treino, ele aparece aqui.'}</p></div>`;
+      return;
+    }
+    el.innerHTML = `<div class="fr-grid">${workouts.map(workoutCardHtml).join('')}</div>`;
+    workouts.forEach(w=>{
+      const card = document.getElementById('fr-workout-card-'+w.id);
+      card.addEventListener('click', ()=> openWorkoutDetail(w.id));
+      card.addEventListener('keydown', e=>{ if(e.key==='Enter') openWorkoutDetail(w.id); });
+    });
+  }
+
+  function workoutCardHtml(w){
+    let tag = 'Geral', color = 'var(--blue)';
+    if(w.assigned_to_user_id === currentUser.id){ tag = 'Pra você'; color = 'var(--green-deep)'; }
+    else if(w.created_by === currentUser.id){ tag = 'Você criou'; color = 'var(--mustard)'; }
+    return `
+      <div class="fr-card" id="fr-workout-card-${w.id}" tabindex="0" role="button" aria-label="Ver treino ${esc(w.name)}">
+        <div class="fr-card-hole"></div>
+        <div class="fr-card-tab" style="background:${color}">${esc(tag)}</div>
+        <div class="fr-card-name">${esc(w.name)}</div>
+        ${w.notes ? `<div class="fr-card-notes">${esc(w.notes)}</div>` : ''}
+      </div>`;
+  }
+
+  async function openWorkoutDetail(id){
+    const w = workouts.find(x=>x.id===id);
+    if(!w) return;
+    const canEdit = w.created_by === currentUser.id;
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">${esc(w.name)}</h3>
+      ${w.notes ? `<p class="fr-hint" style="margin-bottom:14px;">${esc(w.notes)}</p>` : ''}
+      <div id="fr-workout-exercises"><div class="fr-loading">Carregando exercícios...</div></div>
+      ${canEdit ? `<button class="fr-btn-ghost" id="fr-workout-edit" style="width:100%;margin-top:14px;">Gerenciar exercícios / editar treino</button>` : ''}
+    `);
+    if(canEdit){
+      overlay.querySelector('#fr-workout-edit').addEventListener('click', ()=>{ closeOverlay(); openWorkoutExerciseManager(w.id, w.name); });
+    }
+    const { data, error } = await sb.from('workout_exercises').select('*').eq('workout_id', id).order('position');
+    const exEl = overlay.querySelector('#fr-workout-exercises');
+    if(error){ exEl.innerHTML = `<p class="fr-hint">Não foi possível carregar.</p>`; return; }
+    const exercises = data || [];
+    if(exercises.length===0){ exEl.innerHTML = `<p class="fr-hint">Nenhum exercício cadastrado ainda.</p>`; return; }
+    exEl.innerHTML = exercises.map((ex,i)=>exerciseCardHtml(ex, i+1)).join('');
+    exercises.forEach(ex=>{
+      const videoBtn = exEl.querySelector(`#fr-ex-video-${ex.id}`);
+      if(videoBtn) videoBtn.addEventListener('click', ()=> window.open(ex.video_url, '_blank', 'noopener'));
+      const timerBtn = exEl.querySelector(`#fr-ex-timer-${ex.id}`);
+      if(timerBtn) timerBtn.addEventListener('click', ()=> startRestTimer(ex.id, ex.rest_seconds || 60));
+      const uploadBtn = exEl.querySelector(`#fr-ex-upload-${ex.id}`);
+      if(uploadBtn) uploadBtn.addEventListener('click', ()=> openSubmissionForm(ex.id));
+    });
+  }
+
+  function exerciseCardHtml(ex, num){
+    const metaParts = [];
+    if(ex.sets) metaParts.push(`${esc(ex.sets)} séries`);
+    if(ex.reps) metaParts.push(`${esc(ex.reps)} repetições`);
+    if(ex.rest_seconds) metaParts.push(`descanso ${esc(ex.rest_seconds)}s`);
+    return `
+      <div class="fr-exercise">
+        <div class="fr-exercise-head">
+          <div class="fr-exercise-num">${num}</div>
+          <div class="fr-exercise-name">${esc(ex.name)}</div>
+        </div>
+        ${metaParts.length ? `<div class="fr-exercise-meta">${metaParts.join(' · ')}</div>` : ''}
+        ${ex.notes ? `<div class="fr-hint" style="margin-bottom:10px;">${esc(ex.notes)}</div>` : ''}
+        <div class="fr-exercise-actions">
+          ${ex.video_url ? `<button type="button" class="fr-chip fr-chip-video" id="fr-ex-video-${ex.id}">▶ Ver vídeo</button>` : ''}
+          ${ex.rest_seconds ? `<button type="button" class="fr-chip fr-chip-timer" id="fr-ex-timer-${ex.id}">⏱ Iniciar descanso</button>` : ''}
+          <button type="button" class="fr-chip fr-chip-upload" id="fr-ex-upload-${ex.id}">📎 Enviar meu vídeo</button>
+        </div>
+        <div id="fr-ex-timer-box-${ex.id}"></div>
+      </div>`;
+  }
+
+  function formatTimer(s){
+    const m = Math.floor(s/60);
+    const sec = s % 60;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function startRestTimer(exerciseId, seconds){
+    const box = document.getElementById('fr-ex-timer-box-'+exerciseId);
+    if(!box) return;
+    let remaining = seconds;
+    box.innerHTML = `<div class="fr-timer-box"><div class="fr-timer-num" id="fr-timer-num-${exerciseId}">${formatTimer(remaining)}</div><div class="fr-timer-label">descansando</div></div>`;
+    const interval = setInterval(()=>{
+      remaining -= 1;
+      const numEl = document.getElementById('fr-timer-num-'+exerciseId);
+      if(!numEl){ clearInterval(interval); return; }
+      if(remaining <= 0){
+        clearInterval(interval);
+        box.innerHTML = `<div class="fr-timer-box"><div class="fr-timer-num" style="color:var(--rust)">Descanso concluído!</div></div>`;
+        return;
+      }
+      numEl.textContent = formatTimer(remaining);
+    }, 1000);
+  }
+
+  function openSubmissionForm(exerciseId){
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Enviar meu vídeo</h3>
+      <form id="fr-sub-form">
+        <div class="fr-field"><label for="fr-sub-url">Link do vídeo (YouTube não-listado, Google Drive, etc.)</label><input type="url" id="fr-sub-url" required placeholder="https://..."></div>
+        <div class="fr-field"><label for="fr-sub-notes">Observação (opcional)</label><textarea id="fr-sub-notes" style="min-height:60px"></textarea></div>
+        <div class="fr-form-actions">
+          <button type="button" class="fr-btn-ghost" id="fr-sub-cancel">Cancelar</button>
+          <button type="submit" class="fr-btn-primary">Enviar</button>
+        </div>
+      </form>
+    `);
+    overlay.querySelector('#fr-sub-cancel').addEventListener('click', closeOverlay);
+    overlay.querySelector('#fr-sub-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const btn = overlay.querySelector('button[type="submit"]');
+      const url = document.getElementById('fr-sub-url').value.trim();
+      if(!url){ document.getElementById('fr-sub-url').focus(); return; }
+      const notes = document.getElementById('fr-sub-notes').value;
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      const { error } = await sb.from('exercise_submissions').insert({ exercise_id: exerciseId, user_id: currentUser.id, video_url: url, notes });
+      if(error){ showToast('Não foi possível enviar. Tente novamente.', 'err'); btn.disabled=false; btn.textContent='Enviar'; return; }
+      showToast('Vídeo enviado.', 'ok');
+      closeOverlay();
+    });
+  }
+
+  function openWorkoutFormModal(existing){
+    const isEdit = !!existing;
+    const w = existing || { name:'', notes:'', assigned_to_user_id:null };
+    const assigneeOptions = myClients.map(c=>`<option value="${c.client_id}" ${w.assigned_to_user_id===c.client_id?'selected':''}>${esc(c.email)}</option>`).join('');
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">${isEdit ? 'Editar treino' : 'Novo treino'}</h3>
+      <form id="fr-wk-form">
+        <div class="fr-field"><label for="fr-wk-name">Nome do treino</label><input type="text" id="fr-wk-name" required value="${esc(w.name)}" placeholder="ex.: Treino A — Superiores"></div>
+        <div class="fr-field"><label for="fr-wk-assignee">Pra quem é</label>
+          <select id="fr-wk-assignee">
+            <option value="">Geral (todo mundo vê)</option>
+            ${assigneeOptions}
+          </select>
+        </div>
+        <div class="fr-field"><label for="fr-wk-notes">Observações</label><textarea id="fr-wk-notes" style="min-height:60px">${esc(w.notes||'')}</textarea></div>
+        <div class="fr-form-actions">
+          <button type="button" class="fr-btn-ghost" id="fr-wk-cancel">Cancelar</button>
+          <button type="submit" class="fr-btn-primary">${isEdit ? 'Salvar' : 'Salvar e continuar'}</button>
+        </div>
+      </form>
+    `);
+    overlay.querySelector('#fr-wk-cancel').addEventListener('click', closeOverlay);
+    overlay.querySelector('#fr-wk-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const btn = overlay.querySelector('button[type="submit"]');
+      const name = document.getElementById('fr-wk-name').value.trim();
+      if(!name){ document.getElementById('fr-wk-name').focus(); return; }
+      const payload = {
+        name,
+        assigned_to_user_id: document.getElementById('fr-wk-assignee').value || null,
+        notes: document.getElementById('fr-wk-notes').value
+      };
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      try{
+        let workoutId;
+        if(isEdit){
+          const { error } = await sb.from('workouts').update(payload).eq('id', w.id);
+          if(error) throw error;
+          workoutId = w.id;
+          workouts = workouts.map(x=> x.id===w.id ? {...x, ...payload} : x);
+        } else {
+          payload.created_by = currentUser.id;
+          const { data, error } = await sb.from('workouts').insert(payload).select().single();
+          if(error) throw error;
+          workoutId = data.id;
+          workouts.unshift(data);
+        }
+        showToast('Treino salvo.', 'ok');
+        closeOverlay();
+        openWorkoutExerciseManager(workoutId, name);
+      }catch(err){
+        console.error(err);
+        showToast('Não foi possível salvar agora. Tente novamente.', 'err');
+        btn.disabled = false;
+        btn.textContent = isEdit ? 'Salvar' : 'Salvar e continuar';
+      }
+    });
+  }
+
+  async function openWorkoutExerciseManager(workoutId, workoutName){
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Exercícios — ${esc(workoutName)}</h3>
+      <button class="fr-btn-primary" id="fr-wkex-add" style="width:100%;margin-bottom:16px;">${PLUS_SVG} Adicionar exercício</button>
+      <div id="fr-wkex-list"><div class="fr-loading">Carregando...</div></div>
+      <button class="fr-btn-ghost" id="fr-wkex-done" style="width:100%;margin-top:14px;">Concluir</button>
+    `);
+    overlay.querySelector('#fr-wkex-done').addEventListener('click', ()=>{ closeOverlay(); loadWorkouts(); });
+    overlay.querySelector('#fr-wkex-add').addEventListener('click', ()=> openExerciseFormModal(workoutId, workoutName, null));
+
+    const { data, error } = await sb.from('workout_exercises').select('*').eq('workout_id', workoutId).order('position');
+    const listEl = overlay.querySelector('#fr-wkex-list');
+    if(error){ listEl.innerHTML = `<p class="fr-hint">Não foi possível carregar.</p>`; return; }
+    const exs = data || [];
+    if(exs.length===0){ listEl.innerHTML = `<p class="fr-hint">Nenhum exercício ainda.</p>`; return; }
+    listEl.innerHTML = exs.map(ex=>`<div class="fr-client-row" data-id="${ex.id}"><span class="fr-client-name">${esc(ex.name)}</span><span class="fr-client-arrow">›</span></div>`).join('');
+    listEl.querySelectorAll('.fr-client-row').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        const ex = exs.find(x=>x.id===row.getAttribute('data-id'));
+        closeOverlay();
+        openExerciseFormModal(workoutId, workoutName, ex);
+      });
+    });
+  }
+
+  function openExerciseFormModal(workoutId, workoutName, existing){
+    const isEdit = !!existing;
+    const ex = existing || { name:'', sets:'', reps:'', rest_seconds:'', video_url:'', notes:'' };
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">${isEdit ? 'Editar' : 'Novo'} exercício</h3>
+      <form id="fr-exform">
+        <div class="fr-field"><label for="fr-ex-name">Nome do exercício</label><input type="text" id="fr-ex-name" required value="${esc(ex.name)}"></div>
+        <div class="fr-row4">
+          <div class="fr-field"><label for="fr-ex-sets">Séries</label><input type="number" min="0" id="fr-ex-sets" value="${esc(ex.sets ?? '')}"></div>
+          <div class="fr-field"><label for="fr-ex-reps">Repetições</label><input type="text" id="fr-ex-reps" placeholder="ex.: 10-12" value="${esc(ex.reps||'')}"></div>
+          <div class="fr-field"><label for="fr-ex-rest">Descanso (s)</label><input type="number" min="0" id="fr-ex-rest" value="${esc(ex.rest_seconds ?? '')}"></div>
+        </div>
+        <div class="fr-field"><label for="fr-ex-video">Link do vídeo de demonstração</label><input type="url" id="fr-ex-video" placeholder="https://..." value="${esc(ex.video_url||'')}"></div>
+        <div class="fr-field"><label for="fr-ex-notes">Observações</label><textarea id="fr-ex-notes" style="min-height:50px">${esc(ex.notes||'')}</textarea></div>
+        <div class="fr-form-actions">
+          ${isEdit ? '<button type="button" class="fr-btn-danger" id="fr-ex-delete">Excluir</button>' : '<button type="button" class="fr-btn-ghost" id="fr-ex-back">Voltar</button>'}
+          <button type="submit" class="fr-btn-primary">${isEdit ? 'Salvar' : 'Adicionar'}</button>
+        </div>
+      </form>
+    `);
+    if(overlay.querySelector('#fr-ex-back')){
+      overlay.querySelector('#fr-ex-back').addEventListener('click', ()=>{ closeOverlay(); openWorkoutExerciseManager(workoutId, workoutName); });
+    }
+    if(overlay.querySelector('#fr-ex-delete')){
+      overlay.querySelector('#fr-ex-delete').addEventListener('click', async function(){
+        const btn = this; btn.disabled = true; btn.textContent = 'Excluindo...';
+        const { error } = await sb.from('workout_exercises').delete().eq('id', existing.id);
+        if(error){ showToast('Não foi possível excluir.', 'err'); btn.disabled=false; btn.textContent='Excluir'; return; }
+        showToast('Exercício excluído.', 'ok');
+        closeOverlay();
+        openWorkoutExerciseManager(workoutId, workoutName);
+      });
+    }
+    overlay.querySelector('#fr-exform').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const btn = overlay.querySelector('button[type="submit"]');
+      const name = document.getElementById('fr-ex-name').value.trim();
+      if(!name){ document.getElementById('fr-ex-name').focus(); return; }
+      const payload = {
+        name,
+        sets: numOrNull(document.getElementById('fr-ex-sets').value),
+        reps: document.getElementById('fr-ex-reps').value.trim() || null,
+        rest_seconds: numOrNull(document.getElementById('fr-ex-rest').value),
+        video_url: document.getElementById('fr-ex-video').value.trim() || null,
+        notes: document.getElementById('fr-ex-notes').value
+      };
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      try{
+        if(isEdit){
+          const { error } = await sb.from('workout_exercises').update(payload).eq('id', existing.id);
+          if(error) throw error;
+        } else {
+          payload.workout_id = workoutId;
+          payload.position = Date.now();
+          const { error } = await sb.from('workout_exercises').insert(payload);
+          if(error) throw error;
+        }
+        showToast('Exercício salvo.', 'ok');
+        closeOverlay();
+        openWorkoutExerciseManager(workoutId, workoutName);
+      }catch(err){
+        console.error(err);
+        showToast('Não foi possível salvar agora. Tente novamente.', 'err');
+        btn.disabled = false;
+        btn.textContent = isEdit ? 'Salvar' : 'Adicionar';
+      }
+    });
   }
 
   function renderScopeTabs(){
-    const tabs = [['shared','Receitas do app'], ['personal','Minhas receitas']];
+    const tabs = [['shared','Sugestão de Receitas'], ['personal','Minhas Receitas']];
     document.getElementById('fr-scope-tabs').innerHTML = tabs.map(t=>
       `<button class="fr-scope-tab ${recipeScope===t[0]?'active':''}" data-scope="${t[0]}">${t[1]}</button>`
     ).join('');
@@ -874,7 +1431,8 @@
     const r = activeRecipeList().find(x=>x.id===id);
     if(!r) return;
     const cat = CATS[r.category] || CATS.todas;
-    const ingredients = linesToItems(r.ingredients);
+    const hasStructured = r.ingredients_structured && r.ingredients_structured.length > 0;
+    const legacyIngredients = hasStructured ? [] : linesToItems(r.ingredients);
     const canEdit = canEditActiveScope();
     const tableName = recipeScope==='shared' ? 'recipes' : 'personal_recipes';
     const overlay = buildOverlay(`
@@ -888,7 +1446,7 @@
         <div><span class="fr-nut-val">${esc(r.carbs ?? '—')}</span><span class="fr-nut-label">carb (g)</span></div>
         <div><span class="fr-nut-val">${esc(r.fat ?? '—')}</span><span class="fr-nut-label">gord (g)</span></div>
       </div>
-      ${ingredients.length ? `<div class="fr-detail-section"><h4>Ingredientes</h4><ul>${ingredients.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : ''}
+      ${hasStructured ? `<div class="fr-detail-section"><h4>Ingredientes</h4>${ingredientsListHtml(r.ingredients_structured)}</div>` : (legacyIngredients.length ? `<div class="fr-detail-section"><h4>Ingredientes</h4><ul>${legacyIngredients.map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div>` : '')}
       ${r.instructions ? `<div class="fr-detail-section"><h4>Modo de preparo</h4><div class="fr-detail-pre">${esc(r.instructions)}</div></div>` : ''}
       ${r.notes ? `<div class="fr-detail-notes">${esc(r.notes)}</div>` : ''}
       ${canEdit ? `
@@ -939,6 +1497,56 @@
     document.removeEventListener('keydown', escListener);
   }
 
+  const UNIT_OPTIONS = ['g','kg','ml','l','unidade','xícara','colher de sopa','colher de chá','dente','pitada','a gosto'];
+
+  function ingredientRowHtml(ing){
+    ing = ing || {item:'', quantity:'', unit:'g'};
+    return `
+      <div class="fr-ing-row">
+        <input type="number" step="0.01" min="0" class="fr-ing-qty" placeholder="Qtd" value="${ing.quantity ?? ''}">
+        <select class="fr-ing-unit">${UNIT_OPTIONS.map(u=>`<option value="${esc(u)}" ${ing.unit===u?'selected':''}>${esc(u)}</option>`).join('')}</select>
+        <input type="text" class="fr-ing-item" placeholder="Ingrediente (ex.: Cebola)" value="${esc(ing.item||'')}">
+        <button type="button" class="fr-ing-remove" aria-label="Remover ingrediente">&times;</button>
+      </div>`;
+  }
+
+  function wireIngredientEditor(container, initialList){
+    let rows = (initialList && initialList.length) ? initialList.slice() : [{item:'',quantity:'',unit:'g'}];
+    function render(){
+      container.innerHTML = rows.map(ingredientRowHtml).join('');
+      container.querySelectorAll('.fr-ing-remove').forEach((btn, i)=>{
+        btn.addEventListener('click', ()=>{
+          rows.splice(i, 1);
+          if(rows.length===0) rows.push({item:'',quantity:'',unit:'g'});
+          render();
+        });
+      });
+    }
+    render();
+    return {
+      addRow(){ rows.push({item:'',quantity:'',unit:'g'}); render(); },
+      getRows(){
+        const nodes = container.querySelectorAll('.fr-ing-row');
+        const result = [];
+        nodes.forEach(node=>{
+          const item = node.querySelector('.fr-ing-item').value.trim();
+          const qtyVal = node.querySelector('.fr-ing-qty').value;
+          const unit = node.querySelector('.fr-ing-unit').value;
+          if(item) result.push({ item, quantity: qtyVal==='' ? null : parseFloat(qtyVal), unit });
+        });
+        return result;
+      }
+    };
+  }
+
+  function ingredientsListHtml(list){
+    if(!list || list.length===0) return '';
+    return `<ul>${list.map(i=>{
+      const qty = (i.quantity!==null && i.quantity!==undefined && i.quantity!=='') ? `${i.quantity} ${i.unit||''} ` : '';
+      return `<li>${esc(qty)}${esc(i.item)}</li>`;
+    }).join('')}</ul>`;
+  }
+
   function openAddModal(){ if(canEditActiveScope()) openFormModal(null); }
 
   function openFormModal(existing){
@@ -964,7 +1572,10 @@
           <div class="fr-field"><label for="fr-f-carb">Carbo (g)</label><input type="number" min="0" id="fr-f-carb" value="${esc(r.carbs ?? '')}"></div>
           <div class="fr-field"><label for="fr-f-fat">Gordura (g)</label><input type="number" min="0" id="fr-f-fat" value="${esc(r.fat ?? '')}"></div>
         </div>
-        <div class="fr-field"><label for="fr-f-ing">Ingredientes (um por linha)</label><textarea id="fr-f-ing" placeholder="2 peitos de frango&#10;1 xícara de arroz integral&#10;...">${esc(r.ingredients||'')}</textarea></div>
+        <div class="fr-field"><label>Ingredientes</label>
+          <div id="fr-ing-rows"></div>
+          <button type="button" class="fr-btn-ghost" id="fr-ing-add" style="width:100%;margin-top:6px;">+ Adicionar ingrediente</button>
+        </div>
         <div class="fr-field"><label for="fr-f-inst">Modo de preparo</label><textarea id="fr-f-inst" placeholder="Passo a passo...">${esc(r.instructions||'')}</textarea></div>
         <div class="fr-field"><label for="fr-f-notes">Notas de congelamento / observações</label><textarea id="fr-f-notes" style="min-height:50px" placeholder="ex.: congela bem por até 3 meses">${esc(r.notes||'')}</textarea></div>
         <div class="fr-form-actions">
@@ -973,6 +1584,8 @@
         </div>
       </form>
     `);
+    const ingEditor = wireIngredientEditor(overlay.querySelector('#fr-ing-rows'), r.ingredients_structured);
+    overlay.querySelector('#fr-ing-add').addEventListener('click', ()=> ingEditor.addRow());
     overlay.querySelector('#fr-form-cancel').addEventListener('click', closeOverlay);
     overlay.querySelector('#fr-form').addEventListener('submit', async function(e){
       e.preventDefault();
@@ -987,7 +1600,7 @@
         protein: numOrNull(document.getElementById('fr-f-prot').value),
         carbs: numOrNull(document.getElementById('fr-f-carb').value),
         fat: numOrNull(document.getElementById('fr-f-fat').value),
-        ingredients: document.getElementById('fr-f-ing').value,
+        ingredients_structured: ingEditor.getRows(),
         instructions: document.getElementById('fr-f-inst').value,
         notes: document.getElementById('fr-f-notes').value
       };
@@ -1069,7 +1682,10 @@
           <div class="fr-field"><label for="fr-cf-carb">Carbo (g)</label><input type="number" min="0" id="fr-cf-carb" value="${esc(r.carbs ?? '')}"></div>
           <div class="fr-field"><label for="fr-cf-fat">Gordura (g)</label><input type="number" min="0" id="fr-cf-fat" value="${esc(r.fat ?? '')}"></div>
         </div>
-        <div class="fr-field"><label for="fr-cf-ing">Ingredientes (um por linha)</label><textarea id="fr-cf-ing">${esc(r.ingredients||'')}</textarea></div>
+        <div class="fr-field"><label>Ingredientes</label>
+          <div id="fr-cing-rows"></div>
+          <button type="button" class="fr-btn-ghost" id="fr-cing-add" style="width:100%;margin-top:6px;">+ Adicionar ingrediente</button>
+        </div>
         <div class="fr-field"><label for="fr-cf-inst">Modo de preparo</label><textarea id="fr-cf-inst">${esc(r.instructions||'')}</textarea></div>
         <div class="fr-field"><label for="fr-cf-notes">Notas</label><textarea id="fr-cf-notes" style="min-height:50px">${esc(r.notes||'')}</textarea></div>
         <div class="fr-form-actions">
@@ -1078,6 +1694,8 @@
         </div>
       </form>
     `);
+    const cIngEditor = wireIngredientEditor(overlay.querySelector('#fr-cing-rows'), r.ingredients_structured);
+    overlay.querySelector('#fr-cing-add').addEventListener('click', ()=> cIngEditor.addRow());
     const backBtn = overlay.querySelector('#fr-cf-back') || overlay.querySelector('#fr-cf-delete');
     if(overlay.querySelector('#fr-cf-back')){
       overlay.querySelector('#fr-cf-back').addEventListener('click', ()=>{ closeOverlay(); openClientRecipesModal(client); });
@@ -1105,7 +1723,7 @@
         protein: numOrNull(document.getElementById('fr-cf-prot').value),
         carbs: numOrNull(document.getElementById('fr-cf-carb').value),
         fat: numOrNull(document.getElementById('fr-cf-fat').value),
-        ingredients: document.getElementById('fr-cf-ing').value,
+        ingredients_structured: cIngEditor.getRows(),
         instructions: document.getElementById('fr-cf-inst').value,
         notes: document.getElementById('fr-cf-notes').value
       };
@@ -1608,6 +2226,10 @@
             carbs: numOrNull(document.getElementById('fr-log-carb').value) || 0,
             fat: numOrNull(document.getElementById('fr-log-fat').value) || 0
           };
+          sb.from('food_suggestions').insert({
+            submitted_by: currentUser.id, name,
+            kcal: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat
+          }).then(({error})=>{ if(error) console.error('Erro ao enviar sugestão de alimento', error); });
         }
       }
       btn.disabled = true; btn.textContent = 'Salvando...';
