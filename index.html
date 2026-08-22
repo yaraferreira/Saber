@@ -177,6 +177,34 @@
   .fr-pick-row small{ color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:10.5px; margin-left:4px; }
   .fr-pick-checkbox{ width:16px; height:16px; flex-shrink:0; accent-color:var(--green-deep); }
 
+  .fr-session-active{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--green-deep); border-radius:10px; padding:14px 16px; margin-bottom:14px;
+  }
+  .fr-session-timer{ font-family:'Fraunces',serif; font-weight:700; font-size:24px; color:#F6F1DF; }
+  .fr-session-active .fr-btn-primary{ background:var(--mustard); }
+
+  .fr-exercise-done{ opacity:.75; }
+  .fr-exercise-done .fr-exercise-num{ background:var(--mustard); }
+  .fr-ex-check{
+    display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--green-deep);
+    margin:8px 0 4px; cursor:pointer;
+  }
+  .fr-ex-check input{ width:17px; height:17px; accent-color:var(--green-deep); }
+  .fr-chip-load{ background:none; color:var(--plum); border:1px solid var(--plum); }
+
+  .fr-load-box{ background:#FFFEFA; border:1px dashed var(--border); border-radius:8px; padding:10px; margin-top:10px; }
+  .fr-load-set-row{ display:grid; grid-template-columns: 70px 1fr 1fr; gap:8px; align-items:center; margin-bottom:6px; }
+  .fr-load-set-num{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); }
+  .fr-load-weight, .fr-load-reps{
+    padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+  }
+  .fr-load-history-day{
+    font-size:12px; color:var(--ink-soft); margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);
+  }
+  .fr-load-history-day b{ display:block; color:var(--ink); font-family:'IBM Plex Mono',monospace; font-size:11px; margin-bottom:3px; }
+  .fr-load-history-day span{ display:block; }
+
   #ficharo-root{ padding: 4px 18px 60px; }
   #ficharo-root *{ box-sizing:border-box; }
 
@@ -532,6 +560,11 @@
   let myClients = [];
   let workouts = [];
   let workoutsLoaded = false;
+  let activeSessionId = null;
+  let activeSessionWorkoutId = null;
+  let sessionTimerInterval = null;
+  let sessionStartTime = null;
+  let sessionCompletedExerciseIds = new Set();
 
   let activeCat = 'todas';
   let searchTerm = '';
@@ -752,6 +785,10 @@
       <div class="fr-settings-section">
         <h4>Sugestões de alimentos</h4>
         <div id="fr-suggestions-area"><div class="fr-loading">Carregando...</div></div>
+      </div>
+      <div class="fr-settings-section">
+        <h4>Avaliações de treino pendentes</h4>
+        <div id="fr-assessments-area"><div class="fr-loading">Carregando...</div></div>
       </div>`;
     }
 
@@ -771,7 +808,68 @@
     renderLinkedArea(overlay);
     if(isAdmin){
       renderSuggestionsArea(overlay);
+      renderAssessmentsArea(overlay);
     }
+  }
+
+  async function renderAssessmentsArea(overlay){
+    const el = overlay.querySelector('#fr-assessments-area');
+    const { data, error } = await sb.from('assessment_submissions').select('*').eq('status', 'pending').order('created_at');
+    if(error){ el.innerHTML = `<p class="fr-hint">Não foi possível carregar.</p>`; return; }
+    const list = data || [];
+    if(list.length===0){ el.innerHTML = `<p class="fr-hint">Nenhuma avaliação pendente.</p>`; return; }
+    const userIds = list.map(a=>a.user_id);
+    const { data: profs } = await sb.from('profiles').select('id, email').in('id', userIds);
+    const emailById = {}; (profs||[]).forEach(p=> emailById[p.id]=p.email);
+    el.innerHTML = list.map(a=>`
+      <div class="fr-suggestion" data-id="${a.id}">
+        <div class="fr-suggestion-head"><span class="fr-suggestion-name">${esc(emailById[a.user_id]||'Pessoa')}</span></div>
+        <div class="fr-suggestion-macros">
+          Objetivo: ${esc(a.goal)} · Nível: ${esc(a.level)} · ${esc(a.days_per_week)}x/semana · Liberação médica: ${esc(a.medical_clearance)}<br>
+          Limitações: ${a.limitations && a.limitations.length ? esc(a.limitations.map(l=>LIMITATION_LABELS[l]||l).join(', ')) : '—'}
+          ${a.limitations_notes ? `<br>Nota da pessoa: "${esc(a.limitations_notes)}"` : ''}
+        </div>
+        <div class="fr-suggestion-actions">
+          <button class="fr-btn-primary" data-action="approve" data-id="${a.id}" style="font-size:12px;padding:7px 12px;">Aprovar e gerar treino</button>
+          <button class="fr-btn-danger" data-action="professional" data-id="${a.id}" style="font-size:12px;padding:7px 12px;">Recomendar profissional</button>
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('button[data-action]').forEach(btn=>{
+      btn.addEventListener('click', async function(){
+        const id = this.getAttribute('data-id');
+        const action = this.getAttribute('data-action');
+        const assessment = list.find(a=>a.id===id);
+        this.disabled = true; this.textContent = '...';
+        try{
+          if(action==='approve'){
+            const excluded = [];
+            (assessment.limitations||[]).forEach(l=>{
+              (LIMITATION_EXCLUSIONS[l]||[]).forEach(name=> excluded.push(name));
+            });
+            await loadExerciseLibrary();
+            const plan = generateWorkoutPlan({ goal: assessment.goal, level: assessment.level, days: assessment.days_per_week }, excluded);
+            for(const day of plan){
+              await sb.from('workouts').insert({ name: day.name, assigned_to_user_id: assessment.user_id, created_by: currentUser.id, notes: 'Gerado a partir da avaliação, revisado pelo admin.' })
+                .select().single().then(async ({data:w, error:wErr})=>{
+                  if(wErr || !w) return;
+                  const rows = day.exercises.map((ex,i)=> ({ workout_id: w.id, position:i+1, name:ex.name, sets:ex.sets, reps:ex.reps, rest_seconds:ex.rest_seconds, video_url:ex.video_url, notes:ex.notes }));
+                  if(rows.length) await sb.from('workout_exercises').insert(rows);
+                });
+            }
+            await sb.from('assessment_submissions').update({ status:'approved', reviewed_at:new Date().toISOString() }).eq('id', id);
+            showToast('Treino gerado e liberado.', 'ok');
+          } else {
+            await sb.from('assessment_submissions').update({ status:'needs_professional', reviewed_at:new Date().toISOString() }).eq('id', id);
+            showToast('Marcado como recomendado buscar profissional.', 'ok');
+          }
+          overlay.querySelector(`.fr-suggestion[data-id="${id}"]`).remove();
+        }catch(err){
+          console.error(err);
+          showToast('Não foi possível concluir. Tente novamente.', 'err');
+          this.disabled = false; this.textContent = action==='approve' ? 'Aprovar e gerar treino' : 'Recomendar profissional';
+        }
+      });
+    });
   }
 
   async function renderSuggestionsArea(overlay){
@@ -1137,7 +1235,7 @@
     const myWorkouts = workouts.filter(w=> w.created_by===currentUser.id || w.assigned_to_user_id===currentUser.id);
     const library = workouts.filter(w=> w.assigned_to_user_id===null);
 
-    let html = `
+    let html = `<div id="fr-assessment-status"></div>
       <div class="fr-workout-actions">
         <button class="fr-btn-primary" id="fr-build-own" style="flex:1;">${PLUS_SVG} Montar meu treino</button>
         <button class="fr-btn-ghost" id="fr-take-assessment" style="flex:1;">Fazer avaliação</button>
@@ -1156,6 +1254,7 @@
       html += `<div class="fr-grid">${library.map(workoutCardHtml).join('')}</div>`;
     }
     el.innerHTML = html;
+    checkOwnAssessmentStatus();
 
     document.getElementById('fr-build-own').addEventListener('click', openExercisePickerModal);
     document.getElementById('fr-take-assessment').addEventListener('click', openAssessmentModal);
@@ -1165,6 +1264,18 @@
       card.addEventListener('click', ()=> openWorkoutDetail(w.id));
       card.addEventListener('keydown', e=>{ if(e.key==='Enter') openWorkoutDetail(w.id); });
     });
+  }
+
+  async function checkOwnAssessmentStatus(){
+    const el = document.getElementById('fr-assessment-status');
+    if(!el) return;
+    const { data } = await sb.from('assessment_submissions').select('*').eq('user_id', currentUser.id).order('created_at', {ascending:false}).limit(1).maybeSingle();
+    if(!data || data.status==='approved'){ el.innerHTML=''; return; }
+    if(data.status==='pending'){
+      el.innerHTML = `<div class="fr-detail-notes" style="max-width:1080px;margin:0 auto 16px;">Sua avaliação foi enviada e está aguardando revisão. Assim que for liberada, seu treino aparece aqui em "Meus treinos".</div>`;
+    } else if(data.status==='needs_professional'){
+      el.innerHTML = `<div class="fr-detail-notes" style="max-width:1080px;margin:0 auto 16px;">Depois de revisar sua avaliação, recomendamos buscar um profissional (médico ou educador físico) antes de liberar um treino, por causa da limitação informada.</div>`;
+    }
   }
 
   function workoutCardHtml(w){
@@ -1264,6 +1375,23 @@
   }
 
   /* ---------- Avaliação: gera treino personalizado ---------- */
+  const LIMITATION_LABELS = {
+    coluna: 'Coluna / lombar',
+    joelhos: 'Joelhos',
+    ombros: 'Ombros',
+    punhos_cotovelos: 'Punhos ou cotovelos',
+    quadril: 'Quadril',
+    tornozelo_pe: 'Tornozelo ou pé'
+  };
+  const LIMITATION_EXCLUSIONS = {
+    coluna: ['Levantamento terra','Levantamento terra romeno','Stiff','Remada curvada','Remada cavalinho','Agachamento livre','Agachamento frontal','Agachamento sumô (pés afastados)','Agachamento búlgaro','Roda abdominal','Agachamento no hack'],
+    joelhos: ['Agachamento livre','Agachamento frontal','Agachamento no hack','Agachamento búlgaro','Leg press','Extensora','Passada','Elevação de panturrilha no leg press'],
+    ombros: ['Desenvolvimento com barra','Desenvolvimento com halteres','Desenvolvimento Arnold','Supino inclinado','Supino reto','Supino declinado','Remada alta com barra','Remada alta com halteres','Elevação frontal com halteres','Elevação frontal com barra','Paralelas','Paralelas (foco em peito)'],
+    punhos_cotovelos: ['Flexão diamante','Rosca punho','Rosca punho invertida','Rolo de punho','Rosca testa','Tríceps francês','Supino fechado'],
+    quadril: ['Agachamento livre','Agachamento frontal','Agachamento búlgaro','Agachamento sumô (pés afastados)','Passada','Levantamento terra romeno','Elevação pélvica (ponte com barra)','Extensão de quadril na polia'],
+    tornozelo_pe: ['Elevação de panturrilha em pé (máquina)','Elevação de panturrilha no leg press','Elevação de panturrilha com peso do corpo','Elevação de panturrilha com barra livre','Elevação de panturrilha sentado (máquina)','Elevação de panturrilha sentado com halteres','Passada','Agachamento búlgaro']
+  };
+
   function openAssessmentModal(){
     const overlay = buildOverlay(`
       <h3 class="fr-form-title">Avaliação rápida</h3>
@@ -1292,6 +1420,25 @@
             <option value="5">5 ou mais dias</option>
           </select>
         </div>
+        <div class="fr-field"><label for="fr-as-medical">Você tem liberação médica para praticar exercícios físicos?</label>
+          <select id="fr-as-medical">
+            <option value="sim">Sim</option>
+            <option value="nao_certeza">Não tenho certeza</option>
+            <option value="nao">Não</option>
+          </select>
+        </div>
+        <div class="fr-field"><label>Você sente dor ou tem alguma limitação nessas áreas?</label>
+          <div id="fr-as-limitations">
+            ${Object.keys(LIMITATION_LABELS).map(k=>`
+              <label class="fr-pick-row"><input type="checkbox" class="fr-as-limit-box" value="${k}"><span>${esc(LIMITATION_LABELS[k])}</span></label>
+            `).join('')}
+            <label class="fr-pick-row"><input type="checkbox" class="fr-as-limit-box" id="fr-as-limit-none" value="nenhuma" checked><span>Nenhuma</span></label>
+          </div>
+        </div>
+        <div class="fr-field"><label for="fr-as-notes">Quer descrever melhor essa limitação? (opcional)</label>
+          <textarea id="fr-as-notes" style="min-height:60px" placeholder="ex.: dor lombar ao agachar com peso"></textarea>
+        </div>
+        <div id="fr-as-medical-warning"></div>
         <div class="fr-form-actions">
           <button type="button" class="fr-btn-ghost" id="fr-as-cancel">Cancelar</button>
           <button type="submit" class="fr-btn-primary">Gerar meu treino</button>
@@ -1299,17 +1446,49 @@
       </form>
     `);
     overlay.querySelector('#fr-as-cancel').addEventListener('click', closeOverlay);
+
+    const noneBox = overlay.querySelector('#fr-as-limit-none');
+    const otherBoxes = Array.from(overlay.querySelectorAll('.fr-as-limit-box')).filter(b=>b!==noneBox);
+    noneBox.addEventListener('change', function(){
+      if(this.checked) otherBoxes.forEach(b=> b.checked=false);
+    });
+    otherBoxes.forEach(b=> b.addEventListener('change', function(){
+      if(this.checked) noneBox.checked = false;
+    }));
+
     overlay.querySelector('#fr-assess-form').addEventListener('submit', async function(e){
       e.preventDefault();
       const btn = overlay.querySelector('button[type="submit"]');
+      const medical = document.getElementById('fr-as-medical').value;
+      const warnEl = overlay.querySelector('#fr-as-medical-warning');
+      if(medical === 'nao'){
+        warnEl.innerHTML = `<div class="fr-detail-notes" style="margin-top:0;">Antes de treinar, é importante buscar uma avaliação médica — isso não é algo que o app substitui. Volte aqui quando tiver a liberação.</div>`;
+        return;
+      }
+      const limitations = Array.from(overlay.querySelectorAll('.fr-as-limit-box:checked')).map(b=>b.value).filter(v=>v!=='nenhuma');
       const answers = {
         goal: document.getElementById('fr-as-goal').value,
         level: document.getElementById('fr-as-level').value,
-        days: parseInt(document.getElementById('fr-as-days').value, 10)
+        days: parseInt(document.getElementById('fr-as-days').value, 10),
+        medical, limitations,
+        notes: document.getElementById('fr-as-notes').value.trim()
       };
-      btn.disabled = true; btn.textContent = 'Montando...';
+      btn.disabled = true; btn.textContent = 'Enviando...';
+
+      if(limitations.length > 0){
+        const { error } = await sb.from('assessment_submissions').insert({
+          user_id: currentUser.id, goal: answers.goal, level: answers.level, days_per_week: answers.days,
+          medical_clearance: medical, limitations, limitations_notes: answers.notes
+        });
+        if(error){ showToast('Não foi possível enviar. Tente novamente.', 'err'); btn.disabled=false; btn.textContent='Gerar meu treino'; return; }
+        showToast('Avaliação enviada! Seu treino será liberado depois da revisão.', 'ok');
+        closeOverlay();
+        renderWorkoutsView();
+        return;
+      }
+
       await loadExerciseLibrary();
-      const plan = generateWorkoutPlan(answers);
+      const plan = generateWorkoutPlan(answers, []);
       let allOk = true;
       for(const day of plan){
         const ok = await saveNewPersonalWorkout(day.name, day.exercises);
@@ -1322,11 +1501,12 @@
     });
   }
 
-  function generateWorkoutPlan(answers){
+  function generateWorkoutPlan(answers, excludedNames){
+    excludedNames = excludedNames || [];
     const groups = groupLibraryByMuscle();
     const exPerGroup = answers.level==='iniciante' ? 2 : (answers.level==='avancado' ? 4 : 3);
     function pick(groupName, n){
-      const list = groups[groupName] || [];
+      const list = (groups[groupName] || []).filter(e=> !excludedNames.includes(e.name));
       return list.slice(0, Math.min(n, list.length));
     }
     let plan = [];
@@ -1366,38 +1546,42 @@
     const w = workouts.find(x=>x.id===id);
     if(!w) return;
     const canEdit = w.created_by === currentUser.id;
-    const { data: doneToday } = await sb.from('workout_completions').select('id').eq('user_id', currentUser.id).eq('workout_id', id).eq('date', todayStr()).maybeSingle();
+
+    const { data: openSession } = await sb.from('workout_sessions').select('*').eq('user_id', currentUser.id).eq('workout_id', id).is('finished_at', null).order('started_at', {ascending:false}).limit(1).maybeSingle();
+    if(openSession){
+      activeSessionId = openSession.id;
+      activeSessionWorkoutId = id;
+      sessionStartTime = new Date(openSession.started_at).getTime();
+    } else if(activeSessionWorkoutId !== id){
+      activeSessionId = null; activeSessionWorkoutId = null; sessionStartTime = null;
+    }
+
     const overlay = buildOverlay(`
       <h3 class="fr-form-title">${esc(w.name)}</h3>
       ${w.notes ? `<p class="fr-hint" style="margin-bottom:14px;">${esc(w.notes)}</p>` : ''}
+      <div id="fr-session-box"></div>
       <div id="fr-workout-exercises"><div class="fr-loading">Carregando exercícios...</div></div>
-      <button class="${doneToday ? 'fr-btn-ghost' : 'fr-btn-primary'}" id="fr-mark-done" style="width:100%;margin-top:14px;">${doneToday ? '✓ Concluído hoje — desmarcar' : 'Marcar como concluído hoje'}</button>
-      ${canEdit ? `<button class="fr-btn-ghost" id="fr-workout-edit" style="width:100%;margin-top:10px;">Gerenciar exercícios / editar treino</button>` : ''}
+      ${canEdit ? `<button class="fr-btn-ghost" id="fr-workout-edit" style="width:100%;margin-top:14px;">Gerenciar exercícios / editar treino</button>` : ''}
     `);
-    overlay.querySelector('#fr-mark-done').addEventListener('click', async function(){
-      const btn = this;
-      btn.disabled = true;
-      if(doneToday){
-        const { error } = await sb.from('workout_completions').delete().eq('id', doneToday.id);
-        if(error){ showToast('Não foi possível desmarcar.', 'err'); btn.disabled=false; return; }
-        showToast('Desmarcado.', 'ok');
-      } else {
-        const { error } = await sb.from('workout_completions').insert({ user_id: currentUser.id, workout_id: id, date: todayStr() });
-        if(error){ showToast('Não foi possível marcar. Tente novamente.', 'err'); btn.disabled=false; return; }
-        showToast('Treino marcado como concluído!', 'ok');
-      }
-      closeOverlay();
-      openWorkoutDetail(id);
-    });
     if(canEdit){
-      overlay.querySelector('#fr-workout-edit').addEventListener('click', ()=>{ closeOverlay(); openWorkoutExerciseManager(w.id, w.name); });
+      overlay.querySelector('#fr-workout-edit').addEventListener('click', ()=>{ stopSessionTimerDisplay(); closeOverlay(); openWorkoutExerciseManager(w.id, w.name); });
     }
+
+    renderSessionBox(overlay, id, w.name);
+
+    if(activeSessionId){
+      const { data: comps } = await sb.from('session_exercise_completions').select('exercise_id').eq('session_id', activeSessionId);
+      sessionCompletedExerciseIds = new Set((comps||[]).map(c=>c.exercise_id));
+    } else {
+      sessionCompletedExerciseIds = new Set();
+    }
+
     const { data, error } = await sb.from('workout_exercises').select('*').eq('workout_id', id).order('position');
     const exEl = overlay.querySelector('#fr-workout-exercises');
     if(error){ exEl.innerHTML = `<p class="fr-hint">Não foi possível carregar.</p>`; return; }
     const exercises = data || [];
     if(exercises.length===0){ exEl.innerHTML = `<p class="fr-hint">Nenhum exercício cadastrado ainda.</p>`; return; }
-    exEl.innerHTML = exercises.map((ex,i)=>exerciseCardHtml(ex, i+1)).join('');
+    exEl.innerHTML = exercises.map((ex,i)=>exerciseCardHtml(ex, i+1, !!activeSessionId, sessionCompletedExerciseIds.has(ex.id))).join('');
     exercises.forEach(ex=>{
       const videoBtn = exEl.querySelector(`#fr-ex-video-${ex.id}`);
       if(videoBtn) videoBtn.addEventListener('click', ()=> window.open(ex.video_url, '_blank', 'noopener'));
@@ -1405,18 +1589,138 @@
       if(timerBtn) timerBtn.addEventListener('click', ()=> startRestTimer(ex.id, ex.rest_seconds || 60));
       const uploadBtn = exEl.querySelector(`#fr-ex-upload-${ex.id}`);
       if(uploadBtn) uploadBtn.addEventListener('click', ()=> openSubmissionForm(ex.id));
+      const doneBox = exEl.querySelector(`#fr-ex-done-${ex.id}`);
+      if(doneBox) doneBox.addEventListener('change', ()=> toggleExerciseCompletion(ex.id, doneBox.checked));
+      const loadToggle = exEl.querySelector(`#fr-ex-load-toggle-${ex.id}`);
+      if(loadToggle) loadToggle.addEventListener('click', ()=>{
+        const box = document.getElementById(`fr-ex-load-box-${ex.id}`);
+        box.style.display = box.style.display==='none' ? '' : 'none';
+      });
+      const loadSave = exEl.querySelector(`#fr-ex-load-save-${ex.id}`);
+      if(loadSave) loadSave.addEventListener('click', ()=> saveExerciseLoad(ex));
+      const loadHistory = exEl.querySelector(`#fr-ex-load-history-${ex.id}`);
+      if(loadHistory) loadHistory.addEventListener('click', ()=> toggleLoadHistory(ex));
     });
   }
 
-  function exerciseCardHtml(ex, num){
+  function renderSessionBox(overlay, workoutId, workoutName){
+    const box = overlay.querySelector('#fr-session-box');
+    if(!box) return;
+    if(!activeSessionId){
+      box.innerHTML = `<button class="fr-btn-primary" id="fr-start-session" style="width:100%;margin-bottom:14px;">▶ Iniciar treino</button>`;
+      box.querySelector('#fr-start-session').addEventListener('click', async function(){
+        this.disabled = true; this.textContent = 'Iniciando...';
+        const { data, error } = await sb.from('workout_sessions').insert({ user_id: currentUser.id, workout_id: workoutId, workout_name: workoutName }).select().single();
+        if(error){ showToast('Não foi possível iniciar. Tente novamente.', 'err'); this.disabled=false; this.textContent='▶ Iniciar treino'; return; }
+        activeSessionId = data.id; activeSessionWorkoutId = workoutId; sessionStartTime = new Date(data.started_at).getTime();
+        showToast('Treino iniciado. Bom treino!', 'ok');
+        closeOverlay();
+        openWorkoutDetail(workoutId);
+      });
+      return;
+    }
+    box.innerHTML = `
+      <div class="fr-session-active">
+        <span class="fr-session-timer" id="fr-session-timer">00:00</span>
+        <button class="fr-btn-primary" id="fr-finish-session">■ Finalizar treino</button>
+      </div>`;
+    updateSessionTimerDisplay();
+    stopSessionTimerDisplay();
+    sessionTimerInterval = setInterval(updateSessionTimerDisplay, 1000);
+    box.querySelector('#fr-finish-session').addEventListener('click', async function(){
+      this.disabled = true; this.textContent = 'Finalizando...';
+      const durationSeconds = Math.floor((Date.now() - sessionStartTime)/1000);
+      const { error } = await sb.from('workout_sessions').update({ finished_at: new Date().toISOString(), duration_seconds: durationSeconds }).eq('id', activeSessionId);
+      if(error){ showToast('Não foi possível finalizar. Tente novamente.', 'err'); this.disabled=false; this.textContent='■ Finalizar treino'; return; }
+      await sb.from('workout_completions').insert({ user_id: currentUser.id, workout_id: workoutId, date: todayStr() });
+      stopSessionTimerDisplay();
+      activeSessionId = null; activeSessionWorkoutId = null; sessionStartTime = null;
+      showToast(`Treino finalizado! Duração: ${formatTimer(durationSeconds)}.`, 'ok');
+      closeOverlay();
+    });
+  }
+
+  function updateSessionTimerDisplay(){
+    const el = document.getElementById('fr-session-timer');
+    if(!el || !sessionStartTime){ stopSessionTimerDisplay(); return; }
+    const elapsed = Math.floor((Date.now() - sessionStartTime)/1000);
+    el.textContent = formatTimer(elapsed);
+  }
+  function stopSessionTimerDisplay(){
+    if(sessionTimerInterval){ clearInterval(sessionTimerInterval); sessionTimerInterval = null; }
+  }
+
+  async function toggleExerciseCompletion(exerciseId, checked){
+    if(!activeSessionId) return;
+    if(checked){
+      const { error } = await sb.from('session_exercise_completions').insert({ session_id: activeSessionId, user_id: currentUser.id, exercise_id: exerciseId });
+      if(error){ showToast('Não foi possível marcar.', 'err'); return; }
+      sessionCompletedExerciseIds.add(exerciseId);
+    } else {
+      const { error } = await sb.from('session_exercise_completions').delete().eq('session_id', activeSessionId).eq('exercise_id', exerciseId);
+      if(error){ showToast('Não foi possível desmarcar.', 'err'); return; }
+      sessionCompletedExerciseIds.delete(exerciseId);
+    }
+  }
+
+  async function saveExerciseLoad(ex){
+    const box = document.getElementById(`fr-ex-load-box-${ex.id}`);
+    const rows = Array.from(box.querySelectorAll('.fr-load-set-row'));
+    const toSave = [];
+    rows.forEach(row=>{
+      const setNum = parseInt(row.getAttribute('data-set'), 10);
+      const weight = row.querySelector('.fr-load-weight').value;
+      const reps = row.querySelector('.fr-load-reps').value;
+      if(weight!=='' || reps!==''){
+        toSave.push({ user_id: currentUser.id, session_id: activeSessionId, exercise_id: ex.id, exercise_name: ex.name, set_number: setNum, weight_kg: weight===''?null:parseFloat(weight), reps_done: reps===''?null:parseInt(reps,10) });
+      }
+    });
+    if(toSave.length===0){ showToast('Preencha ao menos uma série.', 'err'); return; }
+    const btn = document.getElementById(`fr-ex-load-save-${ex.id}`);
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    const { error } = await sb.from('exercise_load_logs').insert(toSave);
+    btn.disabled = false; btn.textContent = 'Salvar cargas';
+    if(error){ showToast('Não foi possível salvar. Tente novamente.', 'err'); return; }
+    showToast('Carga registrada!', 'ok');
+  }
+
+  async function toggleLoadHistory(ex){
+    const histBox = document.getElementById(`fr-ex-load-history-box-${ex.id}`);
+    if(histBox.innerHTML){ histBox.innerHTML = ''; return; }
+    histBox.innerHTML = `<div class="fr-loading" style="margin:10px 0;">Carregando histórico...</div>`;
+    const { data, error } = await sb.from('exercise_load_logs').select('*').eq('user_id', currentUser.id).eq('exercise_id', ex.id).order('created_at', {ascending:false}).limit(15);
+    if(error || !data || data.length===0){ histBox.innerHTML = `<p class="fr-hint">Nenhum registro anterior ainda.</p>`; return; }
+    const byDate = {};
+    data.forEach(l=>{
+      const d = l.created_at.slice(0,10);
+      if(!byDate[d]) byDate[d]=[];
+      byDate[d].push(l);
+    });
+    histBox.innerHTML = Object.keys(byDate).map(d=>`
+      <div class="fr-load-history-day">
+        <b>${esc(formatDateLabel(d))}</b>
+        ${byDate[d].sort((a,b)=>a.set_number-b.set_number).map(l=>`<span>Série ${l.set_number}: ${l.weight_kg??'?'}kg × ${l.reps_done??'?'}</span>`).join('')}
+      </div>`).join('');
+  }
+
+  function exerciseCardHtml(ex, num, sessionActive, isCompleted){
     const metaParts = [];
     if(ex.sets) metaParts.push(`${esc(ex.sets)} séries`);
     if(ex.reps) metaParts.push(`${esc(ex.reps)} repetições`);
     if(ex.rest_seconds) metaParts.push(`descanso ${esc(ex.rest_seconds)}s`);
+    const setsCount = parseInt(ex.sets) || 3;
+    let loadRows = '';
+    for(let s=1; s<=setsCount; s++){
+      loadRows += `<div class="fr-load-set-row" data-set="${s}">
+        <span class="fr-load-set-num">Série ${s}</span>
+        <input type="number" step="0.5" min="0" class="fr-load-weight" placeholder="kg">
+        <input type="number" min="0" class="fr-load-reps" placeholder="reps">
+      </div>`;
+    }
     return `
-      <div class="fr-exercise">
+      <div class="fr-exercise ${isCompleted ? 'fr-exercise-done' : ''}">
         <div class="fr-exercise-head">
-          <div class="fr-exercise-num">${num}</div>
+          <div class="fr-exercise-num">${isCompleted ? '✓' : num}</div>
           <div class="fr-exercise-name">${esc(ex.name)}</div>
         </div>
         ${metaParts.length ? `<div class="fr-exercise-meta">${metaParts.join(' · ')}</div>` : ''}
@@ -1425,8 +1729,16 @@
           ${ex.video_url ? `<button type="button" class="fr-chip fr-chip-video" id="fr-ex-video-${ex.id}">▶ Ver vídeo</button>` : ''}
           ${ex.rest_seconds ? `<button type="button" class="fr-chip fr-chip-timer" id="fr-ex-timer-${ex.id}">⏱ Iniciar descanso</button>` : ''}
           <button type="button" class="fr-chip fr-chip-upload" id="fr-ex-upload-${ex.id}">📎 Enviar meu vídeo</button>
+          <button type="button" class="fr-chip fr-chip-load" id="fr-ex-load-toggle-${ex.id}">🏋 Registrar carga</button>
         </div>
+        ${sessionActive ? `<label class="fr-ex-check"><input type="checkbox" id="fr-ex-done-${ex.id}" ${isCompleted?'checked':''}> Concluí esse exercício</label>` : ''}
         <div id="fr-ex-timer-box-${ex.id}"></div>
+        <div id="fr-ex-load-box-${ex.id}" class="fr-load-box" style="display:none">
+          ${loadRows}
+          <button type="button" class="fr-btn-primary" id="fr-ex-load-save-${ex.id}" style="width:100%;margin-top:8px;">Salvar cargas</button>
+          <button type="button" class="fr-btn-ghost" id="fr-ex-load-history-${ex.id}" style="width:100%;margin-top:6px;">Ver/ocultar histórico</button>
+          <div id="fr-ex-load-history-box-${ex.id}"></div>
+        </div>
       </div>`;
   }
 
