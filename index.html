@@ -157,6 +157,26 @@
   .fr-timer-num{ font-family:'Fraunces',serif; font-weight:700; font-size:32px; color:var(--green-deep); }
   .fr-timer-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); }
 
+  .fr-workout-actions{ max-width:1080px; margin:0 auto 20px; display:flex; gap:10px; flex-wrap:wrap; }
+  .fr-section-label{
+    max-width:1080px; margin:0 auto 12px; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--green-deep); font-weight:600;
+    border-top:1px solid var(--border); padding-top:16px;
+  }
+  .fr-workout-actions + .fr-section-label{ border-top:none; padding-top:0; }
+
+  .fr-pick-group{ margin-bottom:16px; }
+  .fr-pick-group-title{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--green-deep); font-weight:600; margin-bottom:8px; border-bottom:1px dashed var(--border); padding-bottom:4px;
+  }
+  .fr-pick-row{
+    display:flex; align-items:center; gap:10px; padding:7px 4px; font-size:13.5px; cursor:pointer;
+  }
+  .fr-pick-row:hover{ background:var(--paper-deep); border-radius:6px; }
+  .fr-pick-row small{ color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:10.5px; margin-left:4px; }
+  .fr-pick-checkbox{ width:16px; height:16px; flex-shrink:0; accent-color:var(--green-deep); }
+
   #ficharo-root{ padding: 4px 18px 60px; }
   #ficharo-root *{ box-sizing:border-box; }
 
@@ -1113,14 +1133,35 @@
   function renderWorkoutsView(){
     const el = document.getElementById('fr-workouts-content');
     if(!workoutsLoaded){ el.innerHTML = `<div class="fr-loading">Carregando treinos...</div>`; return; }
-    if(workouts.length===0){
-      const canAdd = isAdmin || (currentProfile && currentProfile.is_professional);
-      el.innerHTML = `<div class="fr-empty"><h3>Nenhum treino ainda</h3><p>${canAdd ? 'Toque em "Novo treino" pra cadastrar o primeiro.' : 'Assim que seu personal cadastrar um treino, ele aparece aqui.'}</p></div>`;
-      return;
+
+    const myWorkouts = workouts.filter(w=> w.created_by===currentUser.id || w.assigned_to_user_id===currentUser.id);
+    const library = workouts.filter(w=> w.assigned_to_user_id===null);
+
+    let html = `
+      <div class="fr-workout-actions">
+        <button class="fr-btn-primary" id="fr-build-own" style="flex:1;">${PLUS_SVG} Montar meu treino</button>
+        <button class="fr-btn-ghost" id="fr-take-assessment" style="flex:1;">Fazer avaliação</button>
+      </div>
+      <div class="fr-section-label">Meus treinos</div>
+    `;
+    if(myWorkouts.length===0){
+      html += `<p class="fr-hint" style="margin-bottom:20px;">Nenhum treino seu ainda. Monte um do zero, faça a avaliação, ou espere seu profissional te atribuir um.</p>`;
+    } else {
+      html += `<div class="fr-grid" style="margin-bottom:24px;">${myWorkouts.map(workoutCardHtml).join('')}</div>`;
     }
-    el.innerHTML = `<div class="fr-grid">${workouts.map(workoutCardHtml).join('')}</div>`;
+    html += `<div class="fr-section-label">Biblioteca de exercícios (referência geral)</div>`;
+    if(library.length===0){
+      html += `<p class="fr-hint">Nenhum treino geral cadastrado ainda.</p>`;
+    } else {
+      html += `<div class="fr-grid">${library.map(workoutCardHtml).join('')}</div>`;
+    }
+    el.innerHTML = html;
+
+    document.getElementById('fr-build-own').addEventListener('click', openExercisePickerModal);
+    document.getElementById('fr-take-assessment').addEventListener('click', openAssessmentModal);
     workouts.forEach(w=>{
       const card = document.getElementById('fr-workout-card-'+w.id);
+      if(!card) return;
       card.addEventListener('click', ()=> openWorkoutDetail(w.id));
       card.addEventListener('keydown', e=>{ if(e.key==='Enter') openWorkoutDetail(w.id); });
     });
@@ -1128,8 +1169,8 @@
 
   function workoutCardHtml(w){
     let tag = 'Geral', color = 'var(--blue)';
-    if(w.assigned_to_user_id === currentUser.id){ tag = 'Pra você'; color = 'var(--green-deep)'; }
-    else if(w.created_by === currentUser.id){ tag = 'Você criou'; color = 'var(--mustard)'; }
+    if(w.assigned_to_user_id === currentUser.id && w.created_by !== currentUser.id){ tag = 'Seu personal'; color = 'var(--green-deep)'; }
+    else if(w.created_by === currentUser.id){ tag = 'Você montou'; color = 'var(--mustard)'; }
     return `
       <div class="fr-card" id="fr-workout-card-${w.id}" tabindex="0" role="button" aria-label="Ver treino ${esc(w.name)}">
         <div class="fr-card-hole"></div>
@@ -1137,6 +1178,188 @@
         <div class="fr-card-name">${esc(w.name)}</div>
         ${w.notes ? `<div class="fr-card-notes">${esc(w.notes)}</div>` : ''}
       </div>`;
+  }
+
+  /* ---------- Biblioteca de exercícios (pra montar treino / avaliação) ---------- */
+  let exerciseLibrary = [];
+  let exerciseLibraryLoaded = false;
+
+  async function loadExerciseLibrary(){
+    if(exerciseLibraryLoaded) return;
+    const { data: libWorkouts } = await sb.from('workouts').select('id, name').is('assigned_to_user_id', null);
+    if(!libWorkouts || libWorkouts.length===0){ exerciseLibrary = []; exerciseLibraryLoaded = true; return; }
+    const ids = libWorkouts.map(w=>w.id);
+    const { data: exs } = await sb.from('workout_exercises').select('*').in('workout_id', ids).order('position');
+    const nameById = {}; libWorkouts.forEach(w=> nameById[w.id]=w.name);
+    exerciseLibrary = (exs||[]).map(e=> ({ ...e, group_name: nameById[e.workout_id] || 'Outros' }));
+    exerciseLibraryLoaded = true;
+  }
+
+  function groupLibraryByMuscle(){
+    const groups = {};
+    exerciseLibrary.forEach(e=>{
+      if(!groups[e.group_name]) groups[e.group_name] = [];
+      groups[e.group_name].push(e);
+    });
+    return groups;
+  }
+
+  async function openExercisePickerModal(){
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Montar meu treino</h3>
+      <div class="fr-field"><label for="fr-pick-name">Nome do treino</label><input type="text" id="fr-pick-name" placeholder="ex.: Treino de hoje" value="Meu treino"></div>
+      <div id="fr-pick-list"><div class="fr-loading">Carregando exercícios...</div></div>
+      <button class="fr-btn-primary" id="fr-pick-save" style="width:100%;margin-top:16px;">Salvar meu treino</button>
+    `);
+    await loadExerciseLibrary();
+    const listEl = overlay.querySelector('#fr-pick-list');
+    const groups = groupLibraryByMuscle();
+    if(Object.keys(groups).length===0){
+      listEl.innerHTML = `<p class="fr-hint">Nenhum exercício disponível na biblioteca ainda.</p>`;
+      return;
+    }
+    listEl.innerHTML = Object.keys(groups).map(gName=>`
+      <div class="fr-pick-group">
+        <div class="fr-pick-group-title">${esc(gName)}</div>
+        ${groups[gName].map(e=>`
+          <label class="fr-pick-row">
+            <input type="checkbox" class="fr-pick-checkbox" value="${e.id}">
+            <span>${esc(e.name)} <small>${e.sets||'?'}x${esc(e.reps||'?')}</small></span>
+          </label>`).join('')}
+      </div>`).join('');
+
+    overlay.querySelector('#fr-pick-save').addEventListener('click', async function(){
+      const checked = Array.from(overlay.querySelectorAll('.fr-pick-checkbox:checked')).map(c=>c.value);
+      if(checked.length===0){ showToast('Selecione ao menos um exercício.', 'err'); return; }
+      const name = document.getElementById('fr-pick-name').value.trim() || 'Meu treino';
+      const btn = this;
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      const selectedExercises = exerciseLibrary.filter(e=> checked.includes(e.id));
+      const ok = await saveNewPersonalWorkout(name, selectedExercises);
+      if(!ok){ btn.disabled=false; btn.textContent='Salvar meu treino'; return; }
+      showToast('Treino montado!', 'ok');
+      closeOverlay();
+      loadWorkouts();
+    });
+  }
+
+  async function saveNewPersonalWorkout(name, exercisesToCopy){
+    try{
+      const { data: w, error: wErr } = await sb.from('workouts').insert({
+        name, assigned_to_user_id: currentUser.id, created_by: currentUser.id, notes: null
+      }).select().single();
+      if(wErr) throw wErr;
+      const rows = exercisesToCopy.map((e,i)=> ({
+        workout_id: w.id, position: i+1, name: e.name, sets: e.sets, reps: e.reps,
+        rest_seconds: e.rest_seconds, video_url: e.video_url, notes: e.notes
+      }));
+      const { error: exErr } = await sb.from('workout_exercises').insert(rows);
+      if(exErr) throw exErr;
+      return true;
+    }catch(err){
+      console.error(err);
+      showToast('Não foi possível salvar o treino agora.', 'err');
+      return false;
+    }
+  }
+
+  /* ---------- Avaliação: gera treino personalizado ---------- */
+  function openAssessmentModal(){
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Avaliação rápida</h3>
+      <p class="fr-hint" style="margin-bottom:16px;">Responda pra eu montar um treino sugerido a partir da biblioteca de exercícios.</p>
+      <form id="fr-assess-form">
+        <div class="fr-field"><label for="fr-as-goal">Objetivo</label>
+          <select id="fr-as-goal">
+            <option value="emagrecer">Emagrecer</option>
+            <option value="ganhar_massa">Ganhar massa muscular</option>
+            <option value="definir">Definir</option>
+            <option value="geral">Condicionamento geral</option>
+          </select>
+        </div>
+        <div class="fr-field"><label for="fr-as-level">Nível de experiência</label>
+          <select id="fr-as-level">
+            <option value="iniciante">Iniciante</option>
+            <option value="intermediario" selected>Intermediário</option>
+            <option value="avancado">Avançado</option>
+          </select>
+        </div>
+        <div class="fr-field"><label for="fr-as-days">Quantos dias por semana você vai treinar?</label>
+          <select id="fr-as-days">
+            <option value="2">2 dias</option>
+            <option value="3" selected>3 dias</option>
+            <option value="4">4 dias</option>
+            <option value="5">5 ou mais dias</option>
+          </select>
+        </div>
+        <div class="fr-form-actions">
+          <button type="button" class="fr-btn-ghost" id="fr-as-cancel">Cancelar</button>
+          <button type="submit" class="fr-btn-primary">Gerar meu treino</button>
+        </div>
+      </form>
+    `);
+    overlay.querySelector('#fr-as-cancel').addEventListener('click', closeOverlay);
+    overlay.querySelector('#fr-assess-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const btn = overlay.querySelector('button[type="submit"]');
+      const answers = {
+        goal: document.getElementById('fr-as-goal').value,
+        level: document.getElementById('fr-as-level').value,
+        days: parseInt(document.getElementById('fr-as-days').value, 10)
+      };
+      btn.disabled = true; btn.textContent = 'Montando...';
+      await loadExerciseLibrary();
+      const plan = generateWorkoutPlan(answers);
+      let allOk = true;
+      for(const day of plan){
+        const ok = await saveNewPersonalWorkout(day.name, day.exercises);
+        if(!ok) allOk = false;
+      }
+      if(!allOk){ btn.disabled=false; btn.textContent='Gerar meu treino'; return; }
+      showToast(`${plan.length} treino(s) gerado(s) com base na sua avaliação.`, 'ok');
+      closeOverlay();
+      loadWorkouts();
+    });
+  }
+
+  function generateWorkoutPlan(answers){
+    const groups = groupLibraryByMuscle();
+    const exPerGroup = answers.level==='iniciante' ? 2 : (answers.level==='avancado' ? 4 : 3);
+    function pick(groupName, n){
+      const list = groups[groupName] || [];
+      return list.slice(0, Math.min(n, list.length));
+    }
+    let plan = [];
+    if(answers.days <= 2){
+      const fullBodyGroups = ['Treino de Peito','Treino de Costas','Treino de Pernas','Treino de Ombros','Treino de Bíceps','Treino de Tríceps','Treino de Abdômen'];
+      const exs = [];
+      fullBodyGroups.forEach(g=> exs.push(...pick(g, Math.max(1, Math.round(exPerGroup/2)))));
+      plan.push({ name: 'Treino Full Body (gerado pela avaliação)', exercises: exs });
+    } else if(answers.days === 3){
+      plan.push({ name: 'Treino A — Superiores (gerado pela avaliação)', exercises: [
+        ...pick('Treino de Peito', exPerGroup), ...pick('Treino de Costas', exPerGroup),
+        ...pick('Treino de Ombros', Math.max(1,exPerGroup-1)), ...pick('Treino de Bíceps', Math.max(1,exPerGroup-1)), ...pick('Treino de Tríceps', Math.max(1,exPerGroup-1))
+      ]});
+      plan.push({ name: 'Treino B — Inferiores (gerado pela avaliação)', exercises: [
+        ...pick('Treino de Pernas', exPerGroup+1), ...pick('Treino de Glúteos', exPerGroup), ...pick('Treino de Panturrilhas', 2), ...pick('Treino de Abdômen', exPerGroup)
+      ]});
+      plan.push({ name: 'Treino C — Full Body (gerado pela avaliação)', exercises: [
+        ...pick('Treino de Peito', Math.max(1,exPerGroup-1)), ...pick('Treino de Costas', Math.max(1,exPerGroup-1)),
+        ...pick('Treino de Pernas', Math.max(1,exPerGroup-1)), ...pick('Treino de Ombros', 1), ...pick('Treino de Abdômen', 1)
+      ]});
+    } else if(answers.days === 4){
+      plan.push({ name: 'Treino A — Superiores 1 (gerado pela avaliação)', exercises: [...pick('Treino de Peito', exPerGroup), ...pick('Treino de Ombros', exPerGroup), ...pick('Treino de Tríceps', exPerGroup)] });
+      plan.push({ name: 'Treino B — Inferiores 1 (gerado pela avaliação)', exercises: [...pick('Treino de Pernas', exPerGroup+1), ...pick('Treino de Abdômen', exPerGroup)] });
+      plan.push({ name: 'Treino C — Superiores 2 (gerado pela avaliação)', exercises: [...pick('Treino de Costas', exPerGroup), ...pick('Treino de Trapézio', 2), ...pick('Treino de Bíceps', exPerGroup)] });
+      plan.push({ name: 'Treino D — Inferiores 2 (gerado pela avaliação)', exercises: [...pick('Treino de Glúteos', exPerGroup), ...pick('Treino de Panturrilhas', 2), ...pick('Treino de Antebraço', 2)] });
+    } else {
+      plan.push({ name: 'Treino de Peito (gerado pela avaliação)', exercises: pick('Treino de Peito', exPerGroup+2) });
+      plan.push({ name: 'Treino de Costas (gerado pela avaliação)', exercises: pick('Treino de Costas', exPerGroup+2) });
+      plan.push({ name: 'Treino de Pernas (gerado pela avaliação)', exercises: pick('Treino de Pernas', exPerGroup+2) });
+      plan.push({ name: 'Treino de Ombros (gerado pela avaliação)', exercises: pick('Treino de Ombros', exPerGroup+1) });
+      plan.push({ name: 'Treino de Braços (gerado pela avaliação)', exercises: [...pick('Treino de Bíceps', exPerGroup), ...pick('Treino de Tríceps', exPerGroup)] });
+    }
+    return plan.filter(day=> day.exercises.length>0);
   }
 
   async function openWorkoutDetail(id){
