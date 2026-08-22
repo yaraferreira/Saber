@@ -369,6 +369,10 @@
   }
   .fr-water-btn:hover{ background:var(--blue); color:#fff; }
 
+  .fr-cal-card{
+    max-width:1080px; margin:0 auto; background:var(--card); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px;
+  }
   .fr-cal-legend{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--ink-soft); }
   .fr-cal-legend span{ display:flex; align-items:center; gap:4px; }
   .fr-cal-legend i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
@@ -506,6 +510,7 @@
     <div class="fr-date-nav" id="fr-date-nav"></div>
     <div class="fr-summary" id="fr-summary"></div>
     <div id="fr-diary-content"></div>
+    <div id="fr-calendar-section"></div>
   </div>
 
   <div id="fr-view-shopping" style="display:none">
@@ -2502,6 +2507,7 @@
     renderDateNav();
     renderSummary();
     renderDiaryList();
+    renderInlineCalendar();
     maybeShowWeeklyReport();
   }
 
@@ -2512,14 +2518,12 @@
       <div class="fr-date-label">${esc(formatDateLabel(currentDate))}</div>
       <button class="fr-date-btn" id="fr-date-next" aria-label="Próximo dia">&rsaquo;</button>
       ${currentDate!==todayStr() ? `<button class="fr-date-today-btn" id="fr-date-today">Hoje</button>` : ''}
-      <button class="fr-date-today-btn" id="fr-open-calendar">Calendário</button>
       <button class="fr-targets-btn" id="fr-edit-targets">Metas diárias</button>
     `;
     document.getElementById('fr-date-prev').addEventListener('click', ()=>{ currentDate=shiftDateStr(currentDate,-1); renderDiary(); });
     document.getElementById('fr-date-next').addEventListener('click', ()=>{ currentDate=shiftDateStr(currentDate,1); renderDiary(); });
     const todayBtn = document.getElementById('fr-date-today');
     if(todayBtn) todayBtn.addEventListener('click', ()=>{ currentDate=todayStr(); renderDiary(); });
-    document.getElementById('fr-open-calendar').addEventListener('click', openCalendarModal);
     document.getElementById('fr-edit-targets').addEventListener('click', openTargetsModal);
   }
 
@@ -2621,38 +2625,45 @@
   /* ---------- Calendário de desempenho ---------- */
   let calendarYear, calendarMonth;
 
-  function openCalendarModal(){
-    const [y,m] = currentDate.split('-').map(Number);
-    calendarYear = y; calendarMonth = m-1;
-    const overlay = buildOverlay(`
-      <h3 class="fr-form-title">Calendário de desempenho</h3>
-      <div class="fr-cal-legend">
-        <span><i style="background:var(--blue)"></i> Treino</span>
-        <span><i style="background:var(--green)"></i> Água</span>
-        <span><i style="background:var(--mustard)"></i> Proteína</span>
-        <span><i style="background:var(--rust)"></i> Calorias</span>
+  function renderInlineCalendar(){
+    const el = document.getElementById('fr-calendar-section');
+    if(!el) return;
+    if(calendarYear===undefined){
+      const [y,m] = currentDate.split('-').map(Number);
+      calendarYear = y; calendarMonth = m-1;
+    }
+    el.innerHTML = `
+      <div class="fr-section-label" style="max-width:1080px;margin:24px auto 12px;">Calendário de desempenho</div>
+      <div class="fr-cal-card">
+        <div class="fr-cal-legend">
+          <span><i style="background:var(--blue)"></i> Treino</span>
+          <span><i style="background:var(--green)"></i> Água</span>
+          <span><i style="background:var(--mustard)"></i> Proteína</span>
+          <span><i style="background:var(--rust)"></i> Calorias</span>
+        </div>
+        <div class="fr-cal-nav">
+          <button class="fr-date-btn" id="fr-cal-prev" aria-label="Mês anterior">&lsaquo;</button>
+          <div class="fr-cal-month-label" id="fr-cal-month-label"></div>
+          <button class="fr-date-btn" id="fr-cal-next" aria-label="Próximo mês">&rsaquo;</button>
+        </div>
+        <div id="fr-cal-grid"><div class="fr-loading">Carregando...</div></div>
       </div>
-      <div class="fr-cal-nav">
-        <button class="fr-date-btn" id="fr-cal-prev" aria-label="Mês anterior">&lsaquo;</button>
-        <div class="fr-cal-month-label" id="fr-cal-month-label"></div>
-        <button class="fr-date-btn" id="fr-cal-next" aria-label="Próximo mês">&rsaquo;</button>
-      </div>
-      <div id="fr-cal-grid"><div class="fr-loading">Carregando...</div></div>
-    `);
-    overlay.querySelector('#fr-cal-prev').addEventListener('click', ()=>{
+    `;
+    document.getElementById('fr-cal-prev').addEventListener('click', ()=>{
       calendarMonth--; if(calendarMonth<0){ calendarMonth=11; calendarYear--; }
-      renderCalendarGrid(overlay);
+      renderCalendarGrid();
     });
-    overlay.querySelector('#fr-cal-next').addEventListener('click', ()=>{
+    document.getElementById('fr-cal-next').addEventListener('click', ()=>{
       calendarMonth++; if(calendarMonth>11){ calendarMonth=0; calendarYear++; }
-      renderCalendarGrid(overlay);
+      renderCalendarGrid();
     });
-    renderCalendarGrid(overlay);
+    renderCalendarGrid();
   }
 
-  async function renderCalendarGrid(overlay){
-    const labelEl = overlay.querySelector('#fr-cal-month-label');
-    const gridEl = overlay.querySelector('#fr-cal-grid');
+  async function renderCalendarGrid(){
+    const labelEl = document.getElementById('fr-cal-month-label');
+    const gridEl = document.getElementById('fr-cal-grid');
+    if(!labelEl || !gridEl) return;
     const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
     labelEl.textContent = `${monthNames[calendarMonth]} ${calendarYear}`;
     gridEl.innerHTML = `<div class="fr-loading">Carregando...</div>`;
