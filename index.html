@@ -313,6 +313,33 @@
   .fr-no-targets{ text-align:center; padding:6px 0; color:var(--ink-soft); font-size:13px; }
   .fr-no-targets button{ margin-top:8px; font-family:'Inter',sans-serif; font-weight:600; font-size:13px; background:var(--green-deep); color:#F6F1DF; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; }
 
+  .fr-water-section{ margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
+  .fr-water-buttons{ display:flex; gap:8px; margin-top:8px; }
+  .fr-water-btn{
+    flex:1; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:12px; background:var(--paper-deep);
+    color:var(--ink); border:1px solid var(--border); border-radius:7px; padding:8px 6px; cursor:pointer;
+  }
+  .fr-water-btn:hover{ background:var(--blue); color:#fff; }
+
+  .fr-cal-legend{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--ink-soft); }
+  .fr-cal-legend span{ display:flex; align-items:center; gap:4px; }
+  .fr-cal-legend i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .fr-cal-nav{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:14px; }
+  .fr-cal-month-label{ font-family:'Fraunces',serif; font-weight:600; font-size:16px; color:var(--green-deep); min-width:140px; text-align:center; }
+  .fr-cal-weekdays{ display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); margin-bottom:6px; }
+  .fr-cal-days{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .fr-cal-day{ aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:6px; background:#FFFEFA; border:1px solid var(--border); }
+  .fr-cal-day-empty{ background:none; border:none; }
+  .fr-cal-day-today{ border-color:var(--green-deep); border-width:2px; }
+  .fr-cal-day-num{ font-family:'IBM Plex Mono',monospace; font-size:11px; }
+  .fr-cal-dots{ display:flex; gap:2px; margin-top:2px; min-height:5px; }
+  .fr-cal-dots span{ width:4px; height:4px; border-radius:50%; display:inline-block; }
+
+  .fr-report-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:6px; }
+  .fr-report-stat{ background:#FFFEFA; border:1px solid var(--border); border-radius:9px; padding:14px; text-align:center; }
+  .fr-report-num{ display:block; font-family:'Fraunces',serif; font-weight:700; font-size:24px; color:var(--green-deep); }
+  .fr-report-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+
   .fr-meal-group{ max-width:1080px; margin:0 auto 22px; }
   .fr-meal-group-header{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
   .fr-meal-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
@@ -476,6 +503,7 @@
   let personalRecipesLoaded = false;
   let recipeScope = 'shared'; // 'shared' | 'personal'
   let currentDayLogs = [];
+  let currentDayWater = 0;
   let targets = {};
   let targetsLoaded = false;
   let foods = [];
@@ -566,11 +594,13 @@
     const fatG = fatKcal / 9;
     const carbKcal = Math.max(calories - proteinKcal - fatKcal, 0);
     const carbG = carbKcal / 4;
+    const waterMl = Math.round(weight * 35); // ~35ml/kg, referência geral de hidratação
     return {
       calories: Math.round(calories),
       protein: Math.round(proteinG),
       carbs: Math.round(carbG),
-      fat: Math.round(fatG)
+      fat: Math.round(fatG),
+      water: waterMl
     };
   }
 
@@ -682,6 +712,21 @@
         <div id="fr-linked-area"></div>
       </div>`;
 
+    html += `
+      <div class="fr-settings-section">
+        <h4>Relatório semanal</h4>
+        <p class="fr-hint" style="margin-bottom:8px;">Em que dia da semana você quer ver o resumo dos últimos 7 dias?</p>
+        <select id="fr-report-day">
+          <option value="0" ${currentProfile.report_day===0?'selected':''}>Domingo</option>
+          <option value="1" ${currentProfile.report_day===1?'selected':''}>Segunda-feira</option>
+          <option value="2" ${currentProfile.report_day===2?'selected':''}>Terça-feira</option>
+          <option value="3" ${currentProfile.report_day===3?'selected':''}>Quarta-feira</option>
+          <option value="4" ${currentProfile.report_day===4?'selected':''}>Quinta-feira</option>
+          <option value="5" ${currentProfile.report_day===5?'selected':''}>Sexta-feira</option>
+          <option value="6" ${currentProfile.report_day===6?'selected':''}>Sábado</option>
+        </select>
+      </div>`;
+
     if(isAdmin){
       html += `
       <div class="fr-settings-section">
@@ -691,6 +736,14 @@
     }
 
     const overlay = buildOverlay(`<h3 class="fr-form-title">Configurações da conta</h3>${html}`);
+
+    overlay.querySelector('#fr-report-day').addEventListener('change', async function(){
+      const val = parseInt(this.value, 10);
+      const { error } = await sb.from('profiles').update({ report_day: val }).eq('id', currentUser.id);
+      if(error){ showToast('Não foi possível salvar agora.', 'err'); return; }
+      currentProfile.report_day = val;
+      showToast('Preferência salva.', 'ok');
+    });
 
     if(isPro){
       renderClientsList(overlay);
@@ -1090,12 +1143,29 @@
     const w = workouts.find(x=>x.id===id);
     if(!w) return;
     const canEdit = w.created_by === currentUser.id;
+    const { data: doneToday } = await sb.from('workout_completions').select('id').eq('user_id', currentUser.id).eq('workout_id', id).eq('date', todayStr()).maybeSingle();
     const overlay = buildOverlay(`
       <h3 class="fr-form-title">${esc(w.name)}</h3>
       ${w.notes ? `<p class="fr-hint" style="margin-bottom:14px;">${esc(w.notes)}</p>` : ''}
       <div id="fr-workout-exercises"><div class="fr-loading">Carregando exercícios...</div></div>
-      ${canEdit ? `<button class="fr-btn-ghost" id="fr-workout-edit" style="width:100%;margin-top:14px;">Gerenciar exercícios / editar treino</button>` : ''}
+      <button class="${doneToday ? 'fr-btn-ghost' : 'fr-btn-primary'}" id="fr-mark-done" style="width:100%;margin-top:14px;">${doneToday ? '✓ Concluído hoje — desmarcar' : 'Marcar como concluído hoje'}</button>
+      ${canEdit ? `<button class="fr-btn-ghost" id="fr-workout-edit" style="width:100%;margin-top:10px;">Gerenciar exercícios / editar treino</button>` : ''}
     `);
+    overlay.querySelector('#fr-mark-done').addEventListener('click', async function(){
+      const btn = this;
+      btn.disabled = true;
+      if(doneToday){
+        const { error } = await sb.from('workout_completions').delete().eq('id', doneToday.id);
+        if(error){ showToast('Não foi possível desmarcar.', 'err'); btn.disabled=false; return; }
+        showToast('Desmarcado.', 'ok');
+      } else {
+        const { error } = await sb.from('workout_completions').insert({ user_id: currentUser.id, workout_id: id, date: todayStr() });
+        if(error){ showToast('Não foi possível marcar. Tente novamente.', 'err'); btn.disabled=false; return; }
+        showToast('Treino marcado como concluído!', 'ok');
+      }
+      closeOverlay();
+      openWorkoutDetail(id);
+    });
     if(canEdit){
       overlay.querySelector('#fr-workout-edit').addEventListener('click', ()=>{ closeOverlay(); openWorkoutExerciseManager(w.id, w.name); });
     }
@@ -1818,7 +1888,7 @@
         if(profErr) throw profErr;
         const { error: targetErr } = await sb.from('daily_targets').upsert({
           user_id: currentUser.id, calories: result.calories, protein: result.protein,
-          carbs: result.carbs, fat: result.fat
+          carbs: result.carbs, fat: result.fat, water_goal_ml: result.water
         });
         if(targetErr) throw targetErr;
         currentProfile = { ...currentProfile, ...input, height_cm: input.height, weight_kg: input.weight, activity_level: input.activity, onboarding_done: true };
@@ -1864,6 +1934,17 @@
     currentDayLogs = error ? [] : (data || []);
     if(error) showToast('Não foi possível carregar o diário.', 'err');
   }
+  async function loadWaterForDate(){
+    const { data, error } = await sb.from('water_logs').select('amount_ml').eq('user_id', currentUser.id).eq('date', currentDate);
+    currentDayWater = error ? 0 : (data || []).reduce((s,r)=> s + n0(r.amount_ml), 0);
+  }
+  async function addWater(amountMl){
+    const { error } = await sb.from('water_logs').insert({ user_id: currentUser.id, date: currentDate, amount_ml: amountMl });
+    if(error){ showToast('Não foi possível registrar a água. Tente novamente.', 'err'); return; }
+    currentDayWater += amountMl;
+    showToast(`+${amountMl}ml de água registrados.`, 'ok');
+    renderSummary();
+  }
   async function loadTargetsOnce(){
     if(targetsLoaded) return;
     const { data } = await sb.from('daily_targets').select('*').eq('user_id', currentUser.id).maybeSingle();
@@ -1882,10 +1963,11 @@
     document.getElementById('fr-date-nav').innerHTML = '';
     document.getElementById('fr-summary').innerHTML = '';
     document.getElementById('fr-diary-content').innerHTML = `<div class="fr-loading">Carregando diário...</div>`;
-    await Promise.all([loadDiaryForDate(), loadTargetsOnce()]);
+    await Promise.all([loadDiaryForDate(), loadTargetsOnce(), loadWaterForDate()]);
     renderDateNav();
     renderSummary();
     renderDiaryList();
+    maybeShowWeeklyReport();
   }
 
   function renderDateNav(){
@@ -1895,12 +1977,14 @@
       <div class="fr-date-label">${esc(formatDateLabel(currentDate))}</div>
       <button class="fr-date-btn" id="fr-date-next" aria-label="Próximo dia">&rsaquo;</button>
       ${currentDate!==todayStr() ? `<button class="fr-date-today-btn" id="fr-date-today">Hoje</button>` : ''}
+      <button class="fr-date-today-btn" id="fr-open-calendar">Calendário</button>
       <button class="fr-targets-btn" id="fr-edit-targets">Metas diárias</button>
     `;
     document.getElementById('fr-date-prev').addEventListener('click', ()=>{ currentDate=shiftDateStr(currentDate,-1); renderDiary(); });
     document.getElementById('fr-date-next').addEventListener('click', ()=>{ currentDate=shiftDateStr(currentDate,1); renderDiary(); });
     const todayBtn = document.getElementById('fr-date-today');
     if(todayBtn) todayBtn.addEventListener('click', ()=>{ currentDate=todayStr(); renderDiary(); });
+    document.getElementById('fr-open-calendar').addEventListener('click', openCalendarModal);
     document.getElementById('fr-edit-targets').addEventListener('click', openTargetsModal);
   }
 
@@ -1915,11 +1999,26 @@
     const totals = dayTotals();
     const el = document.getElementById('fr-summary');
     const hasTargets = targets && targets.calories;
+    const waterGoal = Number(targets && targets.water_goal_ml) || 0;
+    const waterHtml = `
+      <div class="fr-water-section">
+        <div class="fr-bar-row">
+          <div class="fr-bar-label"><span>💧 Água</span><span>${Math.round(currentDayWater)}${waterGoal?` / ${waterGoal}ml`:'ml'}</span></div>
+          <div class="fr-bar-track"><div class="fr-bar-fill" style="width:${waterGoal?Math.min(100,(currentDayWater/waterGoal)*100):0}%;background:var(--blue)"></div></div>
+        </div>
+        <div class="fr-water-buttons">
+          <button type="button" class="fr-water-btn" data-ml="200">+200ml</button>
+          <button type="button" class="fr-water-btn" data-ml="300">+300ml</button>
+          <button type="button" class="fr-water-btn" data-ml="500">+500ml</button>
+        </div>
+      </div>`;
     if(!hasTargets){
       el.innerHTML = `
         <div class="fr-summary-kcal"><span class="val">${Math.round(totals.calories)}</span><span class="target">kcal registradas</span></div>
+        ${waterHtml}
         <div class="fr-no-targets">Defina suas metas diárias para acompanhar o progresso.<br><button id="fr-set-targets-inline">Definir metas</button></div>`;
       document.getElementById('fr-set-targets-inline').addEventListener('click', openTargetsModal);
+      wireWaterButtons(el);
       return;
     }
     el.innerHTML = `
@@ -1927,7 +2026,14 @@
       ${barRow('Proteína', totals.protein, targets.protein, 'var(--green)')}
       ${barRow('Carboidrato', totals.carbs, targets.carbs, 'var(--mustard)')}
       ${barRow('Gordura', totals.fat, targets.fat, 'var(--rust)')}
+      ${waterHtml}
     `;
+    wireWaterButtons(el);
+  }
+  function wireWaterButtons(el){
+    el.querySelectorAll('.fr-water-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=> addWater(Number(btn.getAttribute('data-ml'))));
+    });
   }
 
   function logRowHtml(e){
@@ -1977,6 +2083,159 @@
     renderDiaryList();
   }
 
+  /* ---------- Calendário de desempenho ---------- */
+  let calendarYear, calendarMonth;
+
+  function openCalendarModal(){
+    const [y,m] = currentDate.split('-').map(Number);
+    calendarYear = y; calendarMonth = m-1;
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Calendário de desempenho</h3>
+      <div class="fr-cal-legend">
+        <span><i style="background:var(--blue)"></i> Treino</span>
+        <span><i style="background:var(--green)"></i> Água</span>
+        <span><i style="background:var(--mustard)"></i> Proteína</span>
+        <span><i style="background:var(--rust)"></i> Calorias</span>
+      </div>
+      <div class="fr-cal-nav">
+        <button class="fr-date-btn" id="fr-cal-prev" aria-label="Mês anterior">&lsaquo;</button>
+        <div class="fr-cal-month-label" id="fr-cal-month-label"></div>
+        <button class="fr-date-btn" id="fr-cal-next" aria-label="Próximo mês">&rsaquo;</button>
+      </div>
+      <div id="fr-cal-grid"><div class="fr-loading">Carregando...</div></div>
+    `);
+    overlay.querySelector('#fr-cal-prev').addEventListener('click', ()=>{
+      calendarMonth--; if(calendarMonth<0){ calendarMonth=11; calendarYear--; }
+      renderCalendarGrid(overlay);
+    });
+    overlay.querySelector('#fr-cal-next').addEventListener('click', ()=>{
+      calendarMonth++; if(calendarMonth>11){ calendarMonth=0; calendarYear++; }
+      renderCalendarGrid(overlay);
+    });
+    renderCalendarGrid(overlay);
+  }
+
+  async function renderCalendarGrid(overlay){
+    const labelEl = overlay.querySelector('#fr-cal-month-label');
+    const gridEl = overlay.querySelector('#fr-cal-grid');
+    const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    labelEl.textContent = `${monthNames[calendarMonth]} ${calendarYear}`;
+    gridEl.innerHTML = `<div class="fr-loading">Carregando...</div>`;
+
+    const startDate = `${calendarYear}-${pad(calendarMonth+1)}-01`;
+    const daysInMonth = new Date(calendarYear, calendarMonth+1, 0).getDate();
+    const endDate = `${calendarYear}-${pad(calendarMonth+1)}-${pad(daysInMonth)}`;
+
+    await loadTargetsOnce();
+    const [{ data: completions }, { data: waters }, { data: logs }] = await Promise.all([
+      sb.from('workout_completions').select('date').eq('user_id', currentUser.id).gte('date', startDate).lte('date', endDate),
+      sb.from('water_logs').select('date, amount_ml').eq('user_id', currentUser.id).gte('date', startDate).lte('date', endDate),
+      sb.from('diary_logs').select('date, protein, calories').eq('user_id', currentUser.id).gte('date', startDate).lte('date', endDate)
+    ]);
+
+    const trainedDays = new Set((completions||[]).map(c=>c.date));
+    const waterByDay = {};
+    (waters||[]).forEach(w=>{ waterByDay[w.date] = (waterByDay[w.date]||0) + n0(w.amount_ml); });
+    const proteinByDay = {}, calByDay = {};
+    (logs||[]).forEach(l=>{
+      proteinByDay[l.date] = (proteinByDay[l.date]||0) + n0(l.protein);
+      calByDay[l.date] = (calByDay[l.date]||0) + n0(l.calories);
+    });
+
+    const waterGoal = Number(targets && targets.water_goal_ml) || 0;
+    const proteinGoal = Number(targets && targets.protein) || 0;
+    const calGoal = Number(targets && targets.calories) || 0;
+
+    const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+    let html = `<div class="fr-cal-weekdays">${['D','S','T','Q','Q','S','S'].map(d=>`<span>${d}</span>`).join('')}</div><div class="fr-cal-days">`;
+    for(let i=0;i<firstDay;i++) html += `<div class="fr-cal-day fr-cal-day-empty"></div>`;
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr = `${calendarYear}-${pad(calendarMonth+1)}-${pad(d)}`;
+      const isFuture = dateStr > todayStr();
+      const dots = [];
+      if(!isFuture){
+        if(trainedDays.has(dateStr)) dots.push('var(--blue)');
+        if(waterGoal>0 && (waterByDay[dateStr]||0) >= waterGoal) dots.push('var(--green)');
+        if(proteinGoal>0 && (proteinByDay[dateStr]||0) >= proteinGoal) dots.push('var(--mustard)');
+        if(calGoal>0 && calByDay[dateStr]!==undefined && calByDay[dateStr] <= calGoal) dots.push('var(--rust)');
+      }
+      const isToday = dateStr === todayStr();
+      html += `<div class="fr-cal-day ${isToday?'fr-cal-day-today':''}"><span class="fr-cal-day-num">${d}</span><div class="fr-cal-dots">${dots.map(c=>`<span style="background:${c}"></span>`).join('')}</div></div>`;
+    }
+    html += `</div>`;
+    gridEl.innerHTML = html;
+  }
+
+  /* ---------- Relatório semanal ---------- */
+  function maybeShowWeeklyReport(){
+    if(!currentProfile) return;
+    const reportDay = currentProfile.report_day ?? 0;
+    const todayDow = new Date().getDay();
+    const lastShown = currentProfile.last_report_shown_date;
+    const daysSinceLastShown = lastShown ? Math.floor((new Date(todayStr()+'T00:00:00') - new Date(lastShown+'T00:00:00')) / 86400000) : Infinity;
+    if(daysSinceLastShown < 7) return;
+    if(todayDow < reportDay) return;
+    generateWeeklyReport();
+  }
+
+  async function generateWeeklyReport(){
+    const end = todayStr();
+    const start = shiftDateStr(end, -6);
+    await loadTargetsOnce();
+    const [{ data: completions }, { data: waters }, { data: logs }] = await Promise.all([
+      sb.from('workout_completions').select('date').eq('user_id', currentUser.id).gte('date', start).lte('date', end),
+      sb.from('water_logs').select('date, amount_ml').eq('user_id', currentUser.id).gte('date', start).lte('date', end),
+      sb.from('diary_logs').select('date, protein, calories').eq('user_id', currentUser.id).gte('date', start).lte('date', end)
+    ]);
+    const trainedDays = new Set((completions||[]).map(c=>c.date));
+    const waterByDay = {}; (waters||[]).forEach(w=>{ waterByDay[w.date]=(waterByDay[w.date]||0)+n0(w.amount_ml); });
+    const proteinByDay = {}, calByDay = {};
+    (logs||[]).forEach(l=>{
+      proteinByDay[l.date] = (proteinByDay[l.date]||0) + n0(l.protein);
+      calByDay[l.date] = (calByDay[l.date]||0) + n0(l.calories);
+    });
+    const waterGoal = Number(targets && targets.water_goal_ml) || 0;
+    const proteinGoal = Number(targets && targets.protein) || 0;
+    const calGoal = Number(targets && targets.calories) || 0;
+
+    let trainedCount=0, waterCount=0, proteinCount=0, calCount=0;
+    for(let i=0;i<7;i++){
+      const d = shiftDateStr(start, i);
+      if(trainedDays.has(d)) trainedCount++;
+      if(waterGoal>0 && (waterByDay[d]||0)>=waterGoal) waterCount++;
+      if(proteinGoal>0 && (proteinByDay[d]||0)>=proteinGoal) proteinCount++;
+      if(calGoal>0 && calByDay[d]!==undefined && calByDay[d]<=calGoal) calCount++;
+    }
+
+    const tips = [];
+    if(trainedCount < 3) tips.push('Você treinou menos de 3 dias essa semana. Que tal fixar dias específicos na agenda pra criar o hábito?');
+    if(waterGoal>0 && waterCount < 4) tips.push('A meta de água ficou de fora na maior parte dos dias. Tente deixar uma garrafa visível como lembrete.');
+    if(proteinGoal>0 && proteinCount < 4) tips.push('A meta de proteína também ficou baixa. Inclua uma fonte de proteína em cada refeição pra facilitar.');
+    if(calGoal>0 && calCount < 4) tips.push('As calorias passaram do previsto na maioria dos dias. Vale revisar as porções das refeições mais calóricas.');
+    if(tips.length===0) tips.push('Semana muito consistente! Continue assim.');
+
+    showWeeklyReportModal({ trainedCount, waterCount, proteinCount, calCount, tips, start, end });
+
+    const { error } = await sb.from('profiles').update({ last_report_shown_date: todayStr() }).eq('id', currentUser.id);
+    if(!error){ currentProfile.last_report_shown_date = todayStr(); }
+  }
+
+  function showWeeklyReportModal({ trainedCount, waterCount, proteinCount, calCount, tips, start, end }){
+    const overlay = buildOverlay(`
+      <h3 class="fr-form-title">Relatório da semana</h3>
+      <p class="fr-hint" style="margin-bottom:16px;">${esc(formatDateLabel(start))} até ${esc(formatDateLabel(end))}</p>
+      <div class="fr-report-grid">
+        <div class="fr-report-stat"><span class="fr-report-num">${trainedCount}/7</span><span class="fr-report-label">dias treinados</span></div>
+        <div class="fr-report-stat"><span class="fr-report-num">${waterCount}/7</span><span class="fr-report-label">meta de água</span></div>
+        <div class="fr-report-stat"><span class="fr-report-num">${proteinCount}/7</span><span class="fr-report-label">meta de proteína</span></div>
+        <div class="fr-report-stat"><span class="fr-report-num">${calCount}/7</span><span class="fr-report-label">dentro das calorias</span></div>
+      </div>
+      <div class="fr-detail-section"><h4>Dicas pra próxima semana</h4><ul>${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div>
+      <button class="fr-btn-primary" id="fr-report-close" style="width:100%;margin-top:16px;">Fechar</button>
+    `);
+    overlay.querySelector('#fr-report-close').addEventListener('click', closeOverlay);
+  }
+
   function openTargetsModal(){
     const overlay = buildOverlay(`
       <h3 class="fr-form-title">Metas diárias</h3>
@@ -1988,6 +2247,7 @@
           <div class="fr-field"><label for="fr-t-carb">Carbo (g)</label><input type="number" min="0" id="fr-t-carb" value="${esc(targets.carbs ?? '')}"></div>
           <div class="fr-field"><label for="fr-t-fat">Gordura (g)</label><input type="number" min="0" id="fr-t-fat" value="${esc(targets.fat ?? '')}"></div>
         </div>
+        <div class="fr-field"><label for="fr-t-water">Meta de água (ml)</label><input type="number" min="0" id="fr-t-water" value="${esc(targets.water_goal_ml ?? '')}"></div>
         <div class="fr-form-actions">
           <button type="button" class="fr-btn-ghost" id="fr-targets-cancel">Cancelar</button>
           <button type="submit" class="fr-btn-primary">Salvar metas</button>
@@ -2007,7 +2267,8 @@
         calories: numOrNull(document.getElementById('fr-t-cal').value),
         protein: numOrNull(document.getElementById('fr-t-prot').value),
         carbs: numOrNull(document.getElementById('fr-t-carb').value),
-        fat: numOrNull(document.getElementById('fr-t-fat').value)
+        fat: numOrNull(document.getElementById('fr-t-fat').value),
+        water_goal_ml: numOrNull(document.getElementById('fr-t-water').value)
       };
       btn.disabled = true; btn.textContent = 'Salvando...';
       const { error } = await sb.from('daily_targets').upsert(payload);
